@@ -941,6 +941,14 @@ static esp_err_t mesh_post_attach(esp_netif_t *netif, void *h)
  * task and taken away from morselib, which would only drop them. */
 void __wrap_mmint_mmdrv_host_process_rx_frame(struct mmpkt *rxbuf, uint16_t channel)
 {
+    /* This hook is linked into every firmware that carries mesh.c, including roles that never
+     * start the mesh (the gateway as a plain HaLow client). Without a running mesh there is
+     * no queue to hand frames to and nothing of ours to filter: everything is morselib's. */
+    if (!s_up || s_rx_queue == NULL)
+    {
+        __real_mmint_mmdrv_host_process_rx_frame(rxbuf, channel);
+        return;
+    }
     struct mmpktview *view = mmpkt_open(rxbuf);
     const uint8_t *d = mmpkt_get_data_start(view);
     uint32_t len = mmpkt_get_data_length(view);
