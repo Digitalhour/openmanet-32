@@ -12,20 +12,24 @@
 static const char *TAG = "settings";
 #define NS "hopcfg"
 
-static void get_str(nvs_handle_t h, const char *key, char *out, size_t size)
+/* True if the key was there; otherwise out keeps its default. */
+static bool get_str(nvs_handle_t h, const char *key, char *out, size_t size)
 {
-    size_t len = size;
-    if (nvs_get_str(h, key, out, &len) != ESP_OK)
+    char tmp[72];
+    size_t len = sizeof(tmp);
+    if (size > sizeof(tmp) || nvs_get_str(h, key, tmp, &len) != ESP_OK || len > size)
     {
-        return;   /* keep the default already in out */
+        return false;
     }
+    memcpy(out, tmp, len);
+    memset(tmp, 0, sizeof(tmp));
+    return true;
 }
 
 void settings_load(struct hop_settings *s)
 {
     memset(s, 0, sizeof(*s));
     strlcpy(s->mesh_id, CONFIG_HOP_MESH_ID, sizeof(s->mesh_id));
-    strlcpy(s->mesh_password, CONFIG_HOP_MESH_PASSWORD, sizeof(s->mesh_password));
     if (CONFIG_HOP_AP_SSID[0] != '\0')
     {
         strlcpy(s->ap_ssid, CONFIG_HOP_AP_SSID, sizeof(s->ap_ssid));
@@ -38,21 +42,26 @@ void settings_load(struct hop_settings *s)
         esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
         snprintf(s->ap_ssid, sizeof(s->ap_ssid), "Meshpoint-%02X%02X", mac[4], mac[5]);
     }
-    strlcpy(s->ap_password, CONFIG_HOP_AP_PASSWORD, sizeof(s->ap_password));
 
     nvs_handle_t h;
-    if (nvs_open(NS, NVS_READONLY, &h) != ESP_OK)
+    if (nvs_open(NS, NVS_READONLY, &h) == ESP_OK)
     {
-        ESP_LOGI(TAG, "No saved settings: using the build defaults");
-        return;
+        /* Configured only if all four are there: settings_save writes all four, and
+         * settings_erase leaves the namespace itself behind, empty. */
+        struct hop_settings got = *s;
+        bool all = get_str(h, "mesh_id", got.mesh_id, sizeof(got.mesh_id));
+        all &= get_str(h, "mesh_pw", got.mesh_password, sizeof(got.mesh_password));
+        all &= get_str(h, "ap_ssid", got.ap_ssid, sizeof(got.ap_ssid));
+        all &= get_str(h, "ap_pw", got.ap_password, sizeof(got.ap_password));
+        nvs_close(h);
+        if (all)
+        {
+            *s = got;
+            s->configured = true;
+        }
+        memset(&got, 0, sizeof(got));
     }
-    s->from_nvs = true;
-    get_str(h, "mesh_id", s->mesh_id, sizeof(s->mesh_id));
-    get_str(h, "mesh_pw", s->mesh_password, sizeof(s->mesh_password));
-    get_str(h, "ap_ssid", s->ap_ssid, sizeof(s->ap_ssid));
-    get_str(h, "ap_pw", s->ap_password, sizeof(s->ap_password));
-    nvs_close(h);
-    ESP_LOGI(TAG, "Saved settings loaded");
+    ESP_LOGI(TAG, "%s", s->configured ? "Settings loaded" : "Nothing saved: setup mode");
 }
 
 static bool printable(const char *s)

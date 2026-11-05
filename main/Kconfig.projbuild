@@ -1,15 +1,12 @@
 menu "hopnode"
 
     config HOP_MESH_ID
-        string "Mesh name (802.11s Mesh ID)"
-        default "OpenMANET-XIAO"
-
-    config HOP_MESH_PASSWORD
-        string "Mesh password (SAE); leave empty for an open mesh"
+        string "Mesh name suggested on the setup page (empty: none)"
         default ""
         help
-            Set the same password on every node, including the Linux ones (the OpenWrt
-            mesh "key" with encryption sae). Up to 63 characters. Never printed.
+            Only a suggestion filled into the first-boot setup page. The mesh name and
+            password are chosen there by the owner and kept in NVS; nothing about the
+            network is built into the firmware.
 
     config HOP_S1G_CHANNEL
         int "HaLow channel (S1G channel number)"
@@ -81,12 +78,6 @@ menu "hopnode"
             The 2.4 GHz hotspot phones and laptops join to reach the mesh and the settings
             page. The page can change it; this is the value before anything is saved there.
 
-    config HOP_AP_PASSWORD
-        string "Hotspot password (WPA2, 8 to 63 characters)"
-        default "meshpoint"
-        help
-            Starting value only: change it on the settings page. Never printed.
-
     config HOP_AP_CHANNEL
         int "Hotspot 2.4 GHz channel"
         range 1 13
@@ -103,5 +94,21 @@ menu "hopnode"
     config HOP_AP_IP
         string "Hotspot address (a /24; the settings page lives here)"
         default "192.168.4.1"
+
+    config HOP_RESET_GPIO
+        int "Button that erases the settings when held 5 s (-1: none)"
+        range -1 48
+        default 0
+        help
+            The XIAO ESP32S3's BOOT button is GPIO 0. Holding it for 5 seconds while the
+            node runs erases the settings and restarts into setup mode. (Held while
+            powering on, it still enters the ROM download mode as usual.)
+
+    config HOP_LED_GPIO
+        int "LED that blinks while waiting for setup (-1: none)"
+        range -1 48
+        default 21
+        help
+            The XIAO ESP32S3's user LED is GPIO 21, lit when the pin is low.
 
 endmenu

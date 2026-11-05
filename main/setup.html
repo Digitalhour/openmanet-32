@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meshpoint setup</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --text: #1b1f24; --muted: #5d6670; --line: #dde1e6;
+    --accent: #1f6feb; --ok: #1a7f37; --bad: #cf222e; --field: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216; --card: #181c22; --text: #e6e9ed; --muted: #9aa4af; --line: #2a3038;
+      --accent: #4c8dff; --ok: #3fb950; --bad: #f85149; --field: #11151a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 520px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 22px; margin: 4px 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; font-size: 15px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+            padding: 14px 16px; margin-bottom: 14px; }
+  h2 { font-size: 16px; margin: 0 0 4px; display: flex; gap: 10px; align-items: center; }
+  .num { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+         background: var(--accent); color: #fff; font-size: 13px; flex: none; }
+  .hint { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+  label { display: block; font-size: 14px; color: var(--muted); margin: 12px 0 4px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  input[type=text], input[type=password] {
+    width: 100%; padding: 11px 12px; font-size: 16px; color: var(--text); background: var(--field);
+    border: 1px solid var(--line); border-radius: 8px; }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  input[aria-invalid=true] { border-color: var(--bad); }
+  .check { display: flex; align-items: center; gap: 8px; color: var(--text); margin-top: 12px; font-size: 15px; }
+  button { font-size: 16px; padding: 12px 14px; border-radius: 8px; border: 0; cursor: pointer; }
+  button.primary { background: var(--accent); color: #fff; width: 100%; }
+  button.link { background: none; color: var(--accent); padding: 0 4px; font-size: 14px; }
+  button:disabled { opacity: .5; cursor: default; }
+  #msg { min-height: 1.4em; margin: 10px 0 0; font-size: 14px; color: var(--bad); }
+  .done h2 { color: var(--ok); }
+  .done ol { padding-left: 20px; margin: 8px 0 0; }
+  .done li { margin: 6px 0; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<main>
+  <form id="f" autocomplete="off" novalidate>
+    <h1>Set up your meshpoint</h1>
+    <p class="sub">This meshpoint has not been set up yet. Tell it which OpenMANET network to join and
+      choose the Wi-Fi hotspot it will offer. It stays on this setup network until you finish.</p>
+
+    <section>
+      <h2><span class="num">1</span>Your OpenMANET network</h2>
+      <p class="hint">Use the same mesh name and password as your OpenMANET nodes (in LuCI, the
+        HaLow mesh interface's Mesh ID and key).</p>
+      <label for="mesh_id">Mesh name</label>
+      <input type="text" id="mesh_id" maxlength="32" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <label for="mesh_password">Mesh password</label>
+      <div class="row">
+        <input type="password" id="mesh_password" maxlength="63" autocapitalize="off" autocorrect="off">
+        <button type="button" class="link" data-show="mesh_password">Show</button>
+      </div>
+      <label class="check"><input type="checkbox" id="mesh_open"> This mesh has no password</label>
+    </section>
+
+    <section>
+      <h2><span class="num">2</span>This meshpoint's hotspot</h2>
+      <p class="hint">Phones and laptops join this to reach the mesh and this page.</p>
+      <label for="ap_ssid">Hotspot name</label>
+      <input type="text" id="ap_ssid" maxlength="32" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <label for="ap_password">Hotspot password (8 or more characters)</label>
+      <div class="row">
+        <input type="password" id="ap_password" maxlength="63" autocapitalize="off" autocorrect="off">
+        <button type="button" class="link" data-show="ap_password">Show</button>
+      </div>
+      <label for="ap_password2">Hotspot password again</label>
+      <input type="password" id="ap_password2" maxlength="63" autocapitalize="off" autocorrect="off">
+    </section>
+
+    <button type="submit" class="primary" id="go">Finish setup</button>
+    <p id="msg" role="alert"></p>
+  </form>
+
+  <section class="done" id="done" hidden>
+    <h2>Setup saved</h2>
+    <p>The meshpoint is restarting and joining <span class="mono" id="d-mesh"></span>.
+      This setup network goes away.</p>
+    <ol>
+      <li>Wait about 20 seconds.</li>
+      <li>Join the Wi-Fi network <span class="mono" id="d-ssid"></span> with the password you chose.</li>
+      <li>Open <span class="mono">http://192.168.4.1</span> to see the mesh and change settings.</li>
+    </ol>
+    <p class="hint">Locked out? Hold the BOOT button for 5 seconds to erase the settings and start setup again.</p>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function bad(id, text) {
+  $(id).setAttribute("aria-invalid", "true");
+  $(id).focus();
+  $("msg").textContent = text;
+  return false;
+}
+
+function check() {
+  for (const i of document.querySelectorAll("input")) i.removeAttribute("aria-invalid");
+  const id = $("mesh_id").value.trim(), mp = $("mesh_password").value, open = $("mesh_open").checked;
+  const ss = $("ap_ssid").value.trim(), ap = $("ap_password").value, ap2 = $("ap_password2").value;
+  if (!id) return bad("mesh_id", "Enter the mesh name.");
+  if (!open && !mp) return bad("mesh_password", "Enter the mesh password, or tick “This mesh has no password”.");
+  if (!open && (mp.length < 8 || mp.length > 63)) return bad("mesh_password", "The mesh password is 8 to 63 characters.");
+  if (!ss) return bad("ap_ssid", "Enter a hotspot name.");
+  if (ap.length < 8 || ap.length > 63) return bad("ap_password", "The hotspot password needs 8 to 63 characters.");
+  if (ap !== ap2) return bad("ap_password2", "The two hotspot passwords are different.");
+  $("msg").textContent = "";
+  return true;
+}
+
+for (const b of document.querySelectorAll("[data-show]")) {
+  b.addEventListener("click", () => {
+    const i = $(b.dataset.show);
+    i.type = i.type === "password" ? "text" : "password";
+    b.textContent = i.type === "password" ? "Show" : "Hide";
+    if (b.dataset.show === "ap_password") $("ap_password2").type = i.type;
+  });
+}
+
+$("mesh_open").addEventListener("change", () => {
+  $("mesh_password").disabled = $("mesh_open").checked;
+  if ($("mesh_open").checked) $("mesh_password").value = "";
+});
+
+$("f").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!check()) return;
+  $("go").disabled = true;
+  $("msg").textContent = "";
+  const body = {
+    mesh_id: $("mesh_id").value.trim(), mesh_password: $("mesh_password").value, mesh_open: $("mesh_open").checked,
+    ap_ssid: $("ap_ssid").value.trim(), ap_password: $("ap_password").value,
+  };
+  try {
+    const r = await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    let j = {};
+    try { j = await r.json(); } catch (err) {}
+    if (r.ok && j.ok) {
+      $("d-mesh").textContent = body.mesh_id;
+      $("d-ssid").textContent = body.ap_ssid;
+      $("f").hidden = true;
+      $("done").hidden = false;
+      window.scrollTo(0, 0);
+    } else {
+      $("msg").textContent = j.message || ("Error " + r.status);
+      $("go").disabled = false;
+    }
+  } catch (err) {
+    $("msg").textContent = "Could not reach the meshpoint. Are you still on its setup network?";
+    $("go").disabled = false;
+  }
+  for (const k of ["mesh_password", "ap_password", "ap_password2"]) $(k).value = "";
+});
+
+(async () => {
+  try {
+    const st = await (await fetch("/api/status", { cache: "no-store" })).json();
+    $("mesh_id").value = st.mesh_id || "";
+    $("ap_ssid").value = st.ap_ssid || "";
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>

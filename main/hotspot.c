@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: 0BSD OR GPL-3.0-or-later */
 #include "hotspot.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
@@ -17,17 +18,27 @@
 #include "sdkconfig.h"
 
 #include "batadv.h"
+#include "captive_dns.h"
 #include "mesh.h"
 
 static const char *TAG = "hotspot";
 
 extern const char page_html_start[] asm("_binary_page_html_start");
 extern const char page_html_end[] asm("_binary_page_html_end");
+extern const char setup_html_start[] asm("_binary_setup_html_start");
+extern const char setup_html_end[] asm("_binary_setup_html_end");
 
 static struct hop_settings s_running;   /* what this boot runs with */
+static bool s_setup;                    /* nothing saved yet: open setup hotspot, no mesh */
+static char s_ap_name[SETTINGS_SSID_MAX + 1];
 static esp_netif_t *s_ap_netif;
 static esp_netif_t *s_mesh_netif;
 static bool s_ready;
+
+/* DHCP option 114 (RFC 8910): newer phones read the setup page's address straight from the
+ * lease. esp_netif keeps the pointer, not a copy (esp_netif.h, ESP_NETIF_CAPTIVEPORTAL_URI),
+ * so it must stay alive. */
+static const char s_portal_uri[] = "http://" CONFIG_HOP_AP_IP "/";
 
 /* ---------- The access point ---------- */
 
@@ -89,6 +100,17 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 void hotspot_prepare(const struct hop_settings *running)
 {
     s_running = *running;
+    s_setup = !running->configured;
+    if (s_setup)
+    {
+        /* An open network, so the first person can get in, named so nobody mistakes it for
+         * a working meshpoint. Setup insists on a hotspot password before leaving it. */
+        snprintf(s_ap_name, sizeof(s_ap_name), "%.26s-Setup", s_running.ap_ssid);
+    }
+    else
+    {
+        strlcpy(s_ap_name, s_running.ap_ssid, sizeof(s_ap_name));
+    }
     s_ap_netif = esp_netif_create_default_wifi_ap();
     esp_netif_ip_info_t ip = { 0 };
     ip.ip.addr = esp_ip4addr_aton(CONFIG_HOP_AP_IP);
@@ -96,6 +118,11 @@ void hotspot_prepare(const struct hop_settings *running)
     ip.netmask.addr = esp_ip4addr_aton("255.255.255.0");
     esp_netif_dhcps_stop(s_ap_netif);
     ESP_ERROR_CHECK(esp_netif_set_ip_info(s_ap_netif, &ip));
+    if (s_setup)
+    {
+        esp_netif_dhcps_option(s_ap_netif, ESP_NETIF_OP_SET, ESP_NETIF_CAPTIVEPORTAL_URI, (void *)s_portal_uri,
+                               strlen(s_portal_uri));
+    }
     esp_netif_dhcps_start(s_ap_netif);
 
     wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
@@ -105,10 +132,17 @@ void hotspot_prepare(const struct hop_settings *running)
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
 
     wifi_config_t cfg = { 0 };
-    strlcpy((char *)cfg.ap.ssid, s_running.ap_ssid, sizeof(cfg.ap.ssid));
-    cfg.ap.ssid_len = strlen(s_running.ap_ssid);
-    strlcpy((char *)cfg.ap.password, s_running.ap_password, sizeof(cfg.ap.password));
-    cfg.ap.authmode = WIFI_AUTH_WPA2_PSK;
+    strlcpy((char *)cfg.ap.ssid, s_ap_name, sizeof(cfg.ap.ssid));
+    cfg.ap.ssid_len = strlen(s_ap_name);
+    if (s_setup)
+    {
+        cfg.ap.authmode = WIFI_AUTH_OPEN;
+    }
+    else
+    {
+        strlcpy((char *)cfg.ap.password, s_running.ap_password, sizeof(cfg.ap.password));
+        cfg.ap.authmode = WIFI_AUTH_WPA2_PSK;
+    }
     cfg.ap.channel = CONFIG_HOP_AP_CHANNEL;
     cfg.ap.max_connection = 4;
     cfg.ap.pmf_cfg.capable = true;
@@ -190,17 +224,34 @@ static esp_err_t page_get(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "text/html");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    if (s_setup)
+    {
+        return httpd_resp_send(req, setup_html_start, setup_html_end - setup_html_start - 1);
+    }
     return httpd_resp_send(req, page_html_start, page_html_end - page_html_start - 1);
+}
+
+/* Setup mode: every other address (a phone's captive-portal check, any page a person types)
+ * is sent to the setup page. iOS needs a body with the redirect to treat it as a portal
+ * (ESP-IDF captive_portal example, http_404_error_handler). */
+static esp_err_t redirect_to_setup(httpd_req_t *req, httpd_err_code_t err)
+{
+    (void)err;
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Location", s_portal_uri);
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_sendstr(req, "Meshpoint setup");
 }
 
 static esp_err_t status_get(httpd_req_t *req)
 {
     cJSON *root = cJSON_CreateObject();
     cJSON_AddBoolToObject(root, "can_edit", from_hotspot(req));
+    cJSON_AddBoolToObject(root, "setup", s_setup);
     cJSON_AddStringToObject(root, "mesh_id", s_running.mesh_id);
     cJSON_AddBoolToObject(root, "mesh_secure", s_running.mesh_password[0] != '\0');
     cJSON_AddStringToObject(root, "ap_ssid", s_running.ap_ssid);
-    cJSON_AddBoolToObject(root, "saved", s_running.from_nvs);
+    cJSON_AddBoolToObject(root, "saved", s_running.configured);
     cJSON_AddNumberToObject(root, "uptime_s", (double)(esp_timer_get_time() / 1000000));
 
     char buf[18];
@@ -218,8 +269,10 @@ static esp_err_t status_get(httpd_req_t *req)
     wifi_sta_list_t stas;
     cJSON_AddNumberToObject(root, "ap_clients", esp_wifi_ap_get_sta_list(&stas) == ESP_OK ? stas.num : 0);
 
+    /* In setup mode the mesh and batman never start, and their getters take locks that only
+     * exist once they have. */
     struct mesh_neighbour nb[8];
-    int nn = mesh_get_neighbours(nb, 8);
+    int nn = s_setup ? 0 : mesh_get_neighbours(nb, 8);
     cJSON *peers = cJSON_AddArrayToObject(root, "peers");
     for (int i = 0; i < nn; i++)
     {
@@ -233,7 +286,7 @@ static esp_err_t status_get(httpd_req_t *req)
     }
 
     struct batadv_originator og[16];
-    int no = batadv_get_originators(og, 16);
+    int no = s_setup ? 0 : batadv_get_originators(og, 16);
     cJSON *nodes = cJSON_AddArrayToObject(root, "nodes");
     for (int i = 0; i < no; i++)
     {
@@ -327,9 +380,16 @@ static esp_err_t settings_post(httpd_req_t *req)
     }
     fits &= take(root, "ap_ssid", next.ap_ssid, sizeof(next.ap_ssid), false);
     fits &= take(root, "ap_password", next.ap_password, sizeof(next.ap_password), true);
+    bool open_mesh = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(root, "mesh_open"));
     cJSON_Delete(root);
 
     const char *why = fits ? NULL : "A value is too long";
+    if (fits && s_setup && next.mesh_password[0] == '\0' && !open_mesh)
+    {
+        /* In setup there is no current password to keep: blank means the person forgot. */
+        fits = false;
+        why = "Enter the mesh password, or tick Open network";
+    }
     if (!fits || !settings_valid(&next, &why))
     {
         memset(&next, 0, sizeof(next));
@@ -356,7 +416,7 @@ static esp_err_t reset_post(httpd_req_t *req)
     {
         return send_result(req, "500 Internal Server Error", false, "Could not erase the settings");
     }
-    send_result(req, "200 OK", true, "Back to the build defaults. The meshpoint restarts now.");
+    send_result(req, "200 OK", true, "Settings erased. The meshpoint restarts in setup mode.");
     xTaskCreate(restart_task, "restart", 2048, NULL, 5, NULL);
     return ESP_OK;
 }
@@ -383,6 +443,10 @@ static void web_start(void)
     {
         httpd_register_uri_handler(server, &routes[i]);
     }
+    if (s_setup)
+    {
+        httpd_register_err_handler(server, HTTPD_404_NOT_FOUND, redirect_to_setup);
+    }
 }
 
 /* ---------- Bring-up ---------- */
@@ -399,7 +463,11 @@ void hotspot_start(esp_netif_t *mesh_netif)
      * current peaks down next to the HaLow radio on USB power. */
     esp_wifi_set_max_tx_power((int8_t)(CONFIG_HOP_AP_TX_DBM * 4));
     web_start();
+    if (s_setup)
+    {
+        captive_dns_start(esp_ip4addr_aton(CONFIG_HOP_AP_IP));
+    }
     s_ready = true;
-    ESP_LOGI(TAG, "Hotspot \"%s\" on channel %d, page at http://%s/", s_running.ap_ssid, CONFIG_HOP_AP_CHANNEL,
-             CONFIG_HOP_AP_IP);
+    ESP_LOGI(TAG, "%s \"%s\" on channel %d, page at http://%s/", s_setup ? "Setup hotspot (open)" : "Hotspot", s_ap_name,
+             CONFIG_HOP_AP_CHANNEL, CONFIG_HOP_AP_IP);
 }

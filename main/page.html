@@ -100,7 +100,7 @@
 
     <button type="submit" class="primary" id="save">Save and restart</button>
     <p id="msg"></p>
-    <div class="actions"><button type="button" class="link" id="reset">Reset to factory settings</button></div>
+    <div class="actions"><button type="button" class="link" id="reset">Erase settings and set up again</button></div>
   </form>
 </main>
 
@@ -127,7 +127,7 @@ async function refresh() {
 
   canEdit = st.can_edit;
   $("title").textContent = st.ap_ssid;
-  $("sub").textContent = "Meshpoint settings" + (st.saved ? "" : " (factory settings)");
+  $("sub").textContent = "Meshpoint settings";
   $("s-mesh").textContent = st.mesh_id;
   $("s-sec").innerHTML = st.mesh_secure ? '<span class="pill ok">Encrypted</span>' : '<span class="pill warn">Open</span>';
   $("s-ip").textContent = st.mesh_ip || "–";
@@ -206,7 +206,7 @@ $("f").addEventListener("submit", async (e) => {
 });
 
 $("reset").addEventListener("click", async () => {
-  if (!confirm("Forget all saved settings and go back to the factory mesh and hotspot settings?")) return;
+  if (!confirm("Erase all settings? The meshpoint leaves the mesh and restarts with an open setup hotspot, " + $("title").textContent + "-Setup, where it waits to be set up again.")) return;
   busy = true; applyLock();
   const r = await post("/api/reset");
   if (r.ok) waitForRestart(); else { say(r.message, "bad"); busy = false; applyLock(); }

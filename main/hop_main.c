@@ -9,6 +9,12 @@
  *
  * A 2.4 GHz hotspot (hotspot.c) lets phones and laptops onto the mesh through NAT, and its
  * page changes which mesh to join and the hotspot's own name and password (settings.c).
+ *
+ * Nothing about the network is built in. A freshly flashed board is in setup mode: the HaLow
+ * radio stays off, the hotspot is open and named ...-Setup, the LED blinks, and the setup
+ * page pops up on whatever joins it. Once the owner has chosen the mesh and the hotspot
+ * password there, the board restarts and joins the mesh. Holding BOOT for 5 seconds erases
+ * the settings and goes back to setup mode.
  */
 
 #include <stdio.h>
@@ -214,6 +220,61 @@ static void status_task(void *arg)
     }
 }
 
+/* ---------- BOOT button and LED ---------- */
+
+#define RESET_HOLD_MS 5000
+
+static void led_set(bool on)
+{
+#if CONFIG_HOP_LED_GPIO >= 0
+    gpio_set_level(CONFIG_HOP_LED_GPIO, on ? 0 : 1);   /* the XIAO's LED is lit when low */
+#else
+    (void)on;
+#endif
+}
+
+static void button_task(void *arg)
+{
+    bool setup = arg != NULL;
+#if CONFIG_HOP_LED_GPIO >= 0
+    gpio_config_t led = { .pin_bit_mask = 1ULL << CONFIG_HOP_LED_GPIO, .mode = GPIO_MODE_OUTPUT };
+    gpio_config(&led);
+#endif
+    led_set(false);
+#if CONFIG_HOP_RESET_GPIO >= 0
+    gpio_config_t btn = { .pin_bit_mask = 1ULL << CONFIG_HOP_RESET_GPIO, .mode = GPIO_MODE_INPUT,
+                          .pull_up_en = GPIO_PULLUP_ENABLE };
+    gpio_config(&btn);
+#endif
+    uint32_t held_ms = 0, tick = 0;
+    for (;;)
+    {
+        vTaskDelay(pdMS_TO_TICKS(100));
+        tick++;
+        bool held = false;
+#if CONFIG_HOP_RESET_GPIO >= 0
+        held = gpio_get_level(CONFIG_HOP_RESET_GPIO) == 0;
+#endif
+        held_ms = held ? held_ms + 100 : 0;
+        if (held_ms >= RESET_HOLD_MS)
+        {
+            led_set(true);
+            ESP_LOGW(TAG, "BOOT held %d s: erasing the settings, restarting into setup mode", RESET_HOLD_MS / 1000);
+            settings_erase();
+            vTaskDelay(pdMS_TO_TICKS(300));
+            esp_restart();
+        }
+        if (held)
+        {
+            led_set(tick % 2);          /* fast blink while the button counts down */
+        }
+        else
+        {
+            led_set(setup && (tick / 5) % 2);   /* setup mode: slow blink; set up: off */
+        }
+    }
+}
+
 /* ---------- Main ---------- */
 
 static void halow_quiesce(void)
@@ -309,8 +370,18 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     ESP_LOGI(TAG, "hopnode starting (reset reason %d)", (int)esp_reset_reason());
     settings_load(&s_settings);
+    bool setup = !s_settings.configured;
+    hotspot_prepare(&s_settings);
+    xTaskCreate(button_task, "button", 3072, setup ? (void *)1 : NULL, 3, NULL);
+    if (setup)
+    {
+        /* No mesh to join yet: the HaLow chip stays in reset (halow_quiesce) and only the
+         * setup hotspot runs. */
+        ESP_LOGW(TAG, "Not set up: join the open setup hotspot to choose the mesh and hotspot");
+        hotspot_start(NULL);
+        return;
+    }
     ESP_LOGI(TAG, "Mesh \"%s\" (%s), hotspot \"%s\"", s_settings.mesh_id,
              s_settings.mesh_password[0] ? "password set" : "open", s_settings.ap_ssid);
-    hotspot_prepare(&s_settings);
     xTaskCreate(bringup_task, "bringup", 8192, NULL, 5, NULL);
 }
