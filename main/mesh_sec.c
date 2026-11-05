@@ -15,13 +15,21 @@
  * (the esp-halow build prefixes it with mmint_). AES-SIV is written here on mbedtls, in the
  * form hostap uses: S2V-CMAC over the three associated-data vectors and the plaintext, then
  * AES-CTR. One detail differs between hostap versions: upstream binds the whole frame body up
- * to the MIC element into the MIC, the Morse SDK copy binds only its first six bytes
- * (MESH_RSN_FRAME_MIC_OFFSET). A HaLowLink 1 on Morse 2.7.6 does it the upstream way. Both are
- * accepted on receive, and whichever a peer uses is used back to it.
+ * to the MIC element into the MIC, the Morse 802.11ah copy binds only its first six bytes
+ * (MESH_RSN_FRAME_MIC_OFFSET), and does so on the frame as the Morse Linux driver presents it
+ * (see aad_body). That is the default; the other bindings are still tried on receive, and
+ * whichever a peer uses is used back to it.
  *
- * Mode: hunting-and-pecking SAE (status 0), group 19, no PMF. That is what the Morse OpenWrt
- * mesh (HaLowLink, OpenMANET) runs; a hash-to-element Commit from a peer is logged and
- * ignored.
+ * Mode: hunting-and-pecking SAE (status 0), group 19. That is what the Morse OpenWrt mesh
+ * (HaLowLink, OpenMANET) runs even with sae_pwe=1 set: its mesh code never uses hash-to-element,
+ * so a hash-to-element Commit from a peer is logged and ignored. OpenMANET also requires PMF
+ * (ieee80211w=2): the peer then marks us MFP, and mesh.c protects the HWMP frames it sends to a
+ * keyed peer. We do not hand out an IGTK and do not verify BIP on group management frames.
+ *
+ * The Morse Linux driver carries a fixed-size AMPE block through its S1G conversion (98 bytes in
+ * an Open, 122 with IGTK data, 70 in a Confirm, none in a Close), sized from the Privacy bit and
+ * the RSN element's PMF bits. Our AMPE has no IGTK data and our RSN element no PMF bits, so the
+ * sizes match. A Close cannot be authenticated through that driver, ours or theirs.
  */
 
 #include <string.h>
@@ -854,15 +862,37 @@ void mesh_sec_pmkid(int ni, uint8_t out[MESH_SEC_PMKID_LEN])
 #define AMPE_GTKDATA (MGTK_LEN + KEY_RSC_LEN + 4)
 #define AAD_WHOLE_BODY 1
 #define AAD_SIX_BYTES 2
+#define AAD_MORSE_11N 3
 #define MIC_OFFSET 6   /* Morse SDK hostap: bytes of the body bound into the MIC */
+#define ACTION_OPEN 1
 
-static size_t aad_body_len(uint8_t mode, size_t body_len)
+/* The body bytes bound into the MIC, by binding mode:
+ *  - whole body: everything before the MIC element (upstream hostap);
+ *  - six bytes: the first six bytes as they go over the air;
+ *  - Morse 11n: the first six bytes as the Morse Linux driver hands the frame to
+ *    wpa_supplicant. The driver rewrites peering frames between the air (S1G elements) and
+ *    mac80211 (11n elements): on receive it puts its fixed eight-rate Supported Rates element
+ *    first, and on transmit it removes the one wpa_supplicant put there. wpa_supplicant binds
+ *    six bytes (MESH_RSN_FRAME_MIC_OFFSET), so in an Open they are category, action,
+ *    capability, 01 08; in a Confirm the sixth and seventh are the AID and match the air.
+ * scratch holds the rebuilt bytes when they differ from the frame. */
+static size_t aad_body(uint8_t mode, const uint8_t *body, size_t body_len, uint8_t scratch[MIC_OFFSET],
+                       const uint8_t **out)
 {
-    if (mode == AAD_SIX_BYTES)
+    *out = body;
+    if (mode == AAD_WHOLE_BODY)
     {
-        return body_len < MIC_OFFSET ? body_len : MIC_OFFSET;
+        return body_len;
     }
-    return body_len;
+    if (mode == AAD_MORSE_11N && body_len >= 4 && body[1] == ACTION_OPEN)
+    {
+        memcpy(scratch, body, 4);
+        scratch[4] = 1;   /* Supported Rates */
+        scratch[5] = 8;   /* eight rates */
+        *out = scratch;
+        return MIC_OFFSET;
+    }
+    return body_len < MIC_OFFSET ? body_len : MIC_OFFSET;
 }
 
 int mesh_sec_protect(int ni, const uint8_t *body, size_t body_len, bool is_open, uint8_t *out, size_t cap)
@@ -898,8 +928,11 @@ int mesh_sec_protect(int ni, const uint8_t *body, size_t body_len, bool is_open,
         memset(q, 0xff, 4);           /* GTK expiry: never */
         q += 4;
     }
-    const uint8_t *aad[3] = { s_own, p->addr, cat };
-    const size_t aad_len[3] = { 6, 6, aad_body_len(p->aad_mode ? p->aad_mode : AAD_WHOLE_BODY, body_len) };
+    uint8_t scratch[MIC_OFFSET];
+    const uint8_t *bound;
+    size_t bound_len = aad_body(p->aad_mode ? p->aad_mode : AAD_MORSE_11N, cat, body_len, scratch, &bound);
+    const uint8_t *aad[3] = { s_own, p->addr, bound };
+    const size_t aad_len[3] = { 6, 6, bound_len };
     const uint8_t *aek = p->aek_mode == 2 ? p->aek64 : p->aek;
     out[0] = 140;                     /* MIC */
     out[1] = 16;
@@ -936,24 +969,29 @@ int mesh_sec_process_ampe(int ni, const uint8_t *body, size_t body_len, bool is_
     }
     const uint8_t *aad[3] = { p->addr, s_own, cat };
     size_t aad_len[3] = { 6, 6, 0 };
+    uint8_t scratch[MIC_OFFSET];
     /* Try the peer's known binding and key first, else every combination, and remember what
-     * worked: whole body or six bytes in the MIC, AEK from a 32-byte or a 64-byte PMK buffer. */
-    uint8_t modes[2] = { p->aad_mode ? p->aad_mode : AAD_WHOLE_BODY, p->aad_mode ? 0 : AAD_SIX_BYTES };
-    uint8_t keys[2] = { p->aek_mode ? p->aek_mode : 1, p->aek_mode ? 0 : 2 };
-    int r = -2;
-    for (int k = 0; k < 2 && r != 0; k++)
+     * worked: the Morse driver's view, the whole body or the six bytes on the air in the MIC,
+     * AEK from a 32-byte or a 64-byte PMK buffer. */
+    uint8_t modes[3] = { AAD_MORSE_11N, AAD_WHOLE_BODY, AAD_SIX_BYTES };
+    uint8_t keys[2] = { 1, 2 };
+    int nmodes = 3, nkeys = 2;
+    if (p->aad_mode)
     {
-        if (keys[k] == 0)
+        modes[0] = p->aad_mode;
+        nmodes = 1;
+    }
+    if (p->aek_mode)
+    {
+        keys[0] = p->aek_mode;
+        nkeys = 1;
+    }
+    int r = -2;
+    for (int k = 0; k < nkeys && r != 0; k++)
+    {
+        for (int m = 0; m < nmodes && r != 0; m++)
         {
-            break;
-        }
-        for (int m = 0; m < 2 && r != 0; m++)
-        {
-            if (modes[m] == 0)
-            {
-                break;
-            }
-            aad_len[2] = aad_body_len(modes[m], body_len);
+            aad_len[2] = aad_body(modes[m], cat, body_len, scratch, &aad[2]);
             r = siv_decrypt(keys[k] == 2 ? p->aek64 : p->aek, mic, rest_len, 3, aad, aad_len, plain);
             if (r == 0 && (p->aad_mode != modes[m] || p->aek_mode != keys[k]))
             {
@@ -962,7 +1000,9 @@ int mesh_sec_process_ampe(int ni, const uint8_t *body, size_t body_len, bool is_
                 char a[18];
                 mac_str(p->addr, a);
                 ESP_LOGI(TAG, "%s: peering MIC binds %s, AEK from a %d-byte PMK buffer", a,
-                         modes[m] == AAD_WHOLE_BODY ? "the whole body" : "six bytes", keys[k] == 2 ? 64 : 32);
+                         modes[m] == AAD_MORSE_11N ? "the Morse driver's six bytes"
+                         : modes[m] == AAD_WHOLE_BODY ? "the whole body" : "six bytes",
+                         keys[k] == 2 ? 64 : 32);
             }
         }
     }

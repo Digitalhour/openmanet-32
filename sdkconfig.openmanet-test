@@ -1,0 +1,11 @@
+# Open test mesh next to the user's OpenMANET HT-HD01 nodes (docs/openmanet-test-mesh.sh).
+# Matches their radio settings: US channel 28, 8 MHz (op class 71), 2 MHz primary at
+# 1 MHz index 3, 1000 TU beacons. Bench TX cap 8 dBm (USB power).
+CONFIG_HOP_MESH_ID="NICC-TEST-OPEN"
+CONFIG_HOP_MESH_PASSWORD=""
+CONFIG_HOP_S1G_CHANNEL=28
+CONFIG_HOP_S1G_OPCLASS=71
+CONFIG_HOP_PRI_BW_MHZ=2
+CONFIG_HOP_PRI_1MHZ_IDX=3
+CONFIG_HOP_BEACON_TUS=1000
+CONFIG_HOP_TX_DBM=8

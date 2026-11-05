@@ -182,6 +182,7 @@ static uint16_t s_mesh_vif = VIF_ID_INVALID;
 static volatile bool s_force_mesh_vif;
 static volatile bool s_patch_mesh_id;
 static struct mmpkt *s_data_pkt_in_flight;
+static struct mmpkt *s_prot_mgmt_pkt;   /* management frame in flight that the chip must encrypt */
 static int16_t s_tx_rssi_hint;   /* RSSI of the next hop for the frame in flight, INT16_MIN for broadcast */
 static bool s_tx_small;
 static uint32_t s_t_tx_us_sum, s_t_tx_us_max, s_t_tx_n, s_t_rxq_us_sum, s_t_rxq_us_max, s_t_rxq_n;           /* small frames go at the base rate: lower latency, nothing to gain from a faster one */
@@ -480,6 +481,10 @@ enum mmwlan_status __wrap_mmint_mmdrv_tx_frame(struct mmpkt *mmpkt, bool is_mgmt
     if (!TX_AS_MGMT && mmpkt != NULL && mmpkt == s_data_pkt_in_flight)
     {
         is_mgmt = false;
+        /* The management helper queues on TID 7; our QoS header says TID 0. The chip takes
+         * the CCMP nonce priority from this TID, so a mismatch makes every encrypted frame
+         * fail its MIC at the receiver (the Morse Linux driver warns on the same mismatch). */
+        mmpkt_get_metadata(mmpkt).tx->tid = 0;
         if (s_tx_sec_on)
         {
             struct mmdrv_tx_metadata *md = mmpkt_get_metadata(mmpkt).tx;
@@ -487,6 +492,14 @@ enum mmwlan_status __wrap_mmint_mmdrv_tx_frame(struct mmpkt *mmpkt, bool is_mgmt
             md->key_idx = s_tx_sec_key_idx;
             md->aid = s_tx_sec_aid;
         }
+    }
+    else if (mmpkt != NULL && mmpkt == s_prot_mgmt_pkt)
+    {
+        /* A protected management frame (Protected bit already set): pairwise key, as
+         * morselib's own PMF path does for a station. */
+        struct mmdrv_tx_metadata *md = mmpkt_get_metadata(mmpkt).tx;
+        md->flags |= MMDRV_TX_FLAG_HW_ENC;
+        md->key_idx = 0;
     }
     return __real_mmint_mmdrv_tx_frame(mmpkt, is_mgmt);
 }
@@ -939,6 +952,27 @@ static esp_err_t mesh_post_attach(esp_netif_t *netif, void *h)
 /* Every frame the chip hands the host lands here first, in morselib's driver task. Beacons
  * feed the neighbour table and go on to morselib; mesh data frames are queued for the mesh
  * task and taken away from morselib, which would only drop them. */
+/* The body of a received management action frame (after the 24-byte header), or NULL.
+ * With PMF a keyed peer protects individually addressed robust action frames such as HWMP:
+ * the chip decrypts them but leaves the CCMP header and MIC in place, so they are skipped
+ * here. The packet number is not checked: a replayed path request only earns another reply.
+ * Group-addressed ones carry a BIP MMIE as their last element, which element parsers skip;
+ * it is not verified. */
+static const uint8_t *action_body(const uint8_t *d, uint32_t len, uint8_t rx_flags, uint32_t *body_len)
+{
+    if (!(d[1] & 0x40))
+    {
+        *body_len = len - 24;
+        return d + 24;
+    }
+    if (!(rx_flags & 0x01) || len < 24 + 8 + 2 + 8)
+    {
+        return NULL;   /* protected, and the chip had no key for it */
+    }
+    *body_len = len - 24 - 8 - 8;
+    return d + 24 + 8;
+}
+
 void __wrap_mmint_mmdrv_host_process_rx_frame(struct mmpkt *rxbuf, uint16_t channel)
 {
     /* This hook is linked into every firmware that carries mesh.c, including roles that never
@@ -953,6 +987,8 @@ void __wrap_mmint_mmdrv_host_process_rx_frame(struct mmpkt *rxbuf, uint16_t chan
     const uint8_t *d = mmpkt_get_data_start(view);
     uint32_t len = mmpkt_get_data_length(view);
     bool consumed = false;
+    const uint8_t *abody = NULL;
+    uint32_t alen = 0;
     if (len >= 16)
     {
         uint16_t fc = d[0] | (d[1] << 8);
@@ -1060,16 +1096,22 @@ void __wrap_mmint_mmdrv_host_process_rx_frame(struct mmpkt *rxbuf, uint16_t chan
             }
         }
         else if (ftype == 0 && subtype == 13 && len >= 26 &&
-                 (d[24] == CAT_SELF_PROTECTED || (d[24] == CAT_MESH && d[25] == 1)))
+                 (abody = action_body(d, len, ((struct rx_meta *)mmpkt_get_metadata(rxbuf).opaque)->flags,
+                                      &alen)) != NULL &&
+                 (abody[0] == CAT_SELF_PROTECTED || (abody[0] == CAT_MESH && abody[1] == 1)))
         {
             consumed = true;   /* mesh peering or HWMP path selection: handled by the mesh task */
-            struct rx_item *it = malloc(sizeof(*it) + len);
+            struct rx_item *it = malloc(sizeof(*it) + 24 + alen);
             if (it != NULL)
             {
-                it->len = (uint16_t)len;
+                /* The queued copy is the plain frame: header, then the body without any CCMP
+                 * header or MIC. */
+                it->len = (uint16_t)(24 + alen);
                 it->rssi = rssi;
-                it->kind = (d[24] == CAT_SELF_PROTECTED) ? 1 : 2;
-                memcpy(it->data, d, len);
+                it->kind = (abody[0] == CAT_SELF_PROTECTED) ? 1 : 2;
+                memcpy(it->data, d, 24);
+                it->data[1] &= (uint8_t)~0x40;
+                memcpy(it->data + 24, abody, alen);
                 if (xQueueSend(s_rx_queue, &it, 0) != pdTRUE)
                 {
                     free(it);
@@ -1226,6 +1268,7 @@ struct prep_params
 {
     uint8_t to[6], orig[6], orig_sn[4], lifetime[4];
     uint32_t target_sn;
+    bool protect;   /* PMF: the peer is keyed, so the reply goes out CCMP-protected */
 };
 
 static uint32_t s_hwmp_sn;
@@ -1237,6 +1280,10 @@ static void build_prep_frame(struct umac_data *umacd, struct consbuf *buf, void 
     const struct prep_params *f = (const struct prep_params *)params;
     uint8_t hdr[24] = { 0 };
     hdr[0] = 0xd0;                                    /* management, action */
+    if (f->protect)
+    {
+        hdr[1] = 0x40;                                /* Protected: the chip adds CCMP */
+    }
     memcpy(&hdr[4], f->to, 6);
     memcpy(&hdr[10], s_addr, 6);
     memcpy(&hdr[16], s_addr, 6);
@@ -1263,6 +1310,14 @@ static void hwmp_process(const uint8_t *d, size_t len)
 {
     const uint8_t *ta = &d[10];
     size_t i = 26;
+    static int shown;
+    if (shown < 4 && len >= 28)
+    {
+        shown++;
+        char a[18];
+        mac_str(ta, a);
+        ESP_LOGI(TAG, "HWMP frame from %s: first element %u, length %u", a, d[26], d[27]);
+    }
     while (i + 2 <= len)
     {
         uint8_t id = d[i], l = d[i + 1];
@@ -1281,12 +1336,18 @@ static void hwmp_process(const uint8_t *d, size_t len)
             memcpy(f.orig_sn, &v[13], 4);
             memcpy(f.lifetime, &v[17], 4);
             f.target_sn = ++s_hwmp_sn;
+            /* A Linux mesh point with PMF drops an unprotected mesh action frame from a keyed
+             * peer (mesh action is a robust management frame), so the reply is protected
+             * with the pairwise key whenever there is one. */
+            f.protect = s_secure && sec_tx_aid_for(ta) >= 0;
             struct mmpkt *pkt = mmint_build_mgmt_frame(s_umacd, build_prep_frame, &f);
             if (pkt != NULL)
             {
                 xSemaphoreTake(s_tx_lock, portMAX_DELAY);
                 s_tx_rssi_hint = INT16_MIN;
+                s_prot_mgmt_pkt = f.protect ? pkt : NULL;
                 enum mmwlan_status st = mmint_umac_datapath_tx_mgmt_frame_ap(s_umacd, pkt, NULL);
+                s_prot_mgmt_pkt = NULL;
                 xSemaphoreGive(s_tx_lock);
                 if (st == MMWLAN_SUCCESS)
                 {
@@ -2051,6 +2112,9 @@ esp_err_t mesh_start(const struct mesh_config *cfg)
     args.pmf_mode = MMWLAN_PMF_DISABLED;
     args.op_class = s_cfg.opclass;
     args.s1g_chan_num = s_cfg.s1g_chan;
+    args.pri_bw_mhz = s_cfg.pri_bw_mhz;
+    args.pri_1mhz_chan_idx = s_cfg.pri_1mhz_chan_idx;
+    args.beacon_interval_tus = s_cfg.beacon_tus;
     args.max_stas = 1;
     s_force_mesh_vif = true;
     enum mmwlan_status st = mmwlan_ap_enable(&args);

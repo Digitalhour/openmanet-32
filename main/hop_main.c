@@ -227,6 +227,9 @@ static void bringup_task(void *arg)
     strlcpy(mc.password, CONFIG_HOP_MESH_PASSWORD, sizeof(mc.password));
     mc.s1g_chan = CONFIG_HOP_S1G_CHANNEL;
     mc.opclass = CONFIG_HOP_S1G_OPCLASS;
+    mc.pri_bw_mhz = CONFIG_HOP_PRI_BW_MHZ;
+    mc.pri_1mhz_chan_idx = CONFIG_HOP_PRI_1MHZ_IDX;
+    mc.beacon_tus = CONFIG_HOP_BEACON_TUS;
     mc.tx_dbm = CONFIG_HOP_TX_DBM;
     mc.ttl = 1;
     mc.require_peering = true;

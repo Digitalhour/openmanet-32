@@ -25,6 +25,12 @@ struct mesh_config
     char password[MESH_PASSWORD_MAX + 1];   /* mesh password (SAE); empty for an open mesh */
     uint8_t s1g_chan;   /* S1G channel number, e.g. 26 */
     uint8_t opclass;    /* global operating class, e.g. 69 (2 MHz) */
+    /* Primary channel inside a wide channel and the beacon interval, as the Linux mesh sets
+     * them (wpa_supplicant s1g_prim_chwidth / s1g_prim_1mhz_chan_index / beacon_int).
+     * 0 = morselib's defaults. */
+    uint8_t pri_bw_mhz;
+    uint8_t pri_1mhz_chan_idx;
+    uint16_t beacon_tus;
     uint8_t tx_dbm;     /* cap, 0 = regulatory maximum */
     uint8_t ttl;        /* hop limit for frames this board sends */
     bool require_peering; /* only exchange data with neighbours the 802.11s peering handshake accepted */
