@@ -34,3 +34,7 @@ CONFIG_LWIP_TCP_RECVMBOX_SIZE=32
 # IP reassembly, so packets bigger than the MTU arrive whole on bat0.
 CONFIG_LWIP_IP4_REASSEMBLY=y
 CONFIG_LWIP_IP_REASS_MAX_PBUFS=20
+
+# Hotspot clients reach the mesh through NAT on bat0 (hotspot.c).
+CONFIG_LWIP_IP_FORWARD=y
+CONFIG_LWIP_IPV4_NAPT=y

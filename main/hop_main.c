@@ -4,8 +4,11 @@
  *
  * Nothing but the two layers that matter: the 802.11s mesh link (mesh.c: beacons, peering,
  * 4-address frames) and batman-adv on top of it (batadv.c: BATMAN_V, the routing OpenMANET
- * runs). No hotspot, no page, no chat. It forwards for everyone, announces itself, and logs
- * what it sees. bat0 gets an address so the node can be pinged and ping its neighbours.
+ * runs). It forwards for everyone, announces itself, and logs what it sees. bat0 gets an
+ * address so the node can be pinged and ping its neighbours.
+ *
+ * A 2.4 GHz hotspot (hotspot.c) lets phones and laptops onto the mesh through NAT, and its
+ * page changes which mesh to join and the hotspot's own name and password (settings.c).
  */
 
 #include <stdio.h>
@@ -26,12 +29,15 @@
 #include "driver/gpio.h"
 
 #include "batadv.h"
+#include "hotspot.h"
 #include "mesh.h"
+#include "settings.h"
 
 static const char *TAG = "hop";
 
 static esp_netif_t *s_bat_netif;
 static uint8_t s_bat_mac[6];
+static struct hop_settings s_settings;
 
 /* ---------- bat0 ---------- */
 
@@ -223,8 +229,8 @@ static void bringup_task(void *arg)
 {
     (void)arg;
     struct mesh_config mc = { 0 };
-    strlcpy(mc.mesh_id, CONFIG_HOP_MESH_ID, sizeof(mc.mesh_id));
-    strlcpy(mc.password, CONFIG_HOP_MESH_PASSWORD, sizeof(mc.password));
+    strlcpy(mc.mesh_id, s_settings.mesh_id, sizeof(mc.mesh_id));
+    strlcpy(mc.password, s_settings.mesh_password, sizeof(mc.password));
     mc.s1g_chan = CONFIG_HOP_S1G_CHANNEL;
     mc.opclass = CONFIG_HOP_S1G_OPCLASS;
     mc.pri_bw_mhz = CONFIG_HOP_PRI_BW_MHZ;
@@ -238,7 +244,9 @@ static void bringup_task(void *arg)
     mc.spi_max_hz = CONFIG_HOP_HALOW_SPI_MAX_HZ;
     mc.reset_hold_ms = CONFIG_HOP_HALOW_RESET_HOLD_MS;
     mc.reset_settle_ms = CONFIG_HOP_HALOW_RESET_SETTLE_MS;
-    if (mesh_start(&mc) != ESP_OK)
+    esp_err_t started = mesh_start(&mc);
+    memset(mc.password, 0, sizeof(mc.password));
+    if (started != ESP_OK)
     {
         ESP_LOGE(TAG, "mesh failed to start; rebooting in 10 s");
         vTaskDelay(pdMS_TO_TICKS(10000));
@@ -279,6 +287,7 @@ static void bringup_task(void *arg)
 
     ESP_ERROR_CHECK(batadv_start(&bc));
     ESP_LOGI(TAG, "hop node up: bat0 " IPSTR, IP2STR(&info.ip));
+    hotspot_start(s_bat_netif);
     xTaskCreate(status_task, "status", 6144, NULL, 3, NULL);
 #if CONFIG_HOP_PING_PEERS
     xTaskCreate(ping_task, "pinger", 4096, NULL, 3, NULL);
@@ -299,5 +308,9 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     ESP_LOGI(TAG, "hopnode starting (reset reason %d)", (int)esp_reset_reason());
+    settings_load(&s_settings);
+    ESP_LOGI(TAG, "Mesh \"%s\" (%s), hotspot \"%s\"", s_settings.mesh_id,
+             s_settings.mesh_password[0] ? "password set" : "open", s_settings.ap_ssid);
+    hotspot_prepare(&s_settings);
     xTaskCreate(bringup_task, "bringup", 8192, NULL, 5, NULL);
 }
