@@ -29,6 +29,8 @@ extern const char page_html_start[] asm("_binary_page_html_start");
 extern const char page_html_end[] asm("_binary_page_html_end");
 extern const char setup_html_start[] asm("_binary_setup_html_start");
 extern const char setup_html_end[] asm("_binary_setup_html_end");
+extern const char board_webp_start[] asm("_binary_board_webp_start");
+extern const char board_webp_end[] asm("_binary_board_webp_end");
 
 static struct hop_settings s_running;   /* what this boot runs with */
 static bool s_setup;                    /* nothing saved yet: open setup hotspot, no mesh */
@@ -308,6 +310,14 @@ static esp_err_t page_get(httpd_req_t *req)
         return httpd_resp_send(req, setup_html_start, setup_html_end - setup_html_start - 1);
     }
     return httpd_resp_send(req, page_html_start, page_html_end - page_html_start - 1);
+}
+
+/* The picture on the sign-in screens. Public, like the pages themselves, and cached. */
+static esp_err_t board_get(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "image/webp");
+    httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=86400");
+    return httpd_resp_send(req, board_webp_start, board_webp_end - board_webp_start);
 }
 
 /* Setup mode: every other address (a phone's captive-portal check, any page a person types)
@@ -672,6 +682,7 @@ static void web_start(void)
     }
     const httpd_uri_t routes[] = {
         { .uri = "/", .method = HTTP_GET, .handler = page_get },
+        { .uri = "/board.webp", .method = HTTP_GET, .handler = board_get },
         { .uri = "/api/status", .method = HTTP_GET, .handler = status_get },
         { .uri = "/api/settings", .method = HTTP_POST, .handler = settings_post },
         { .uri = "/api/reset", .method = HTTP_POST, .handler = reset_post },

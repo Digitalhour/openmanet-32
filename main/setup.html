@@ -3,21 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Meshpoint setup</title>
+<title>OpenMANET-32 setup</title>
 <style>
+  /* Colors from openmanet.net, so the meshpoint looks like the rest of OpenMANET. */
   :root {
-    --bg: #f4f5f7; --card: #ffffff; --text: #1b1f24; --muted: #5d6670; --line: #dde1e6;
-    --accent: #1f6feb; --ok: #1a7f37; --bad: #cf222e; --field: #ffffff;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0f1216; --card: #181c22; --text: #e6e9ed; --muted: #9aa4af; --line: #2a3038;
-      --accent: #4c8dff; --ok: #3fb950; --bad: #f85149; --field: #11151a;
-    }
+    --bg: #080a0a; --card: #0d0f12; --text: #e7ebf2; --muted: #9aa7b3;
+    --line: rgba(255, 255, 255, .08); --field: #080a0a;
+    --accent: #556b2f; --accent-text: #a4c069; --on-accent: #f3f3f3;
+    --ok: #a4c069; --warn: #d29922; --bad: #f85149;
+    color-scheme: dark;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
-         font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+         font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans", sans-serif; }
   main { max-width: 520px; margin: 0 auto; padding: 16px; }
   h1 { font-size: 22px; margin: 4px 0 4px; }
   .sub { color: var(--muted); margin: 0 0 16px; font-size: 15px; }
@@ -25,30 +23,35 @@
             padding: 14px 16px; margin-bottom: 14px; }
   h2 { font-size: 16px; margin: 0 0 4px; display: flex; gap: 10px; align-items: center; }
   .num { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
-         background: var(--accent); color: #fff; font-size: 13px; flex: none; }
+         background: var(--accent); color: var(--on-accent); font-size: 13px; font-weight: 600; flex: none; }
   .hint { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
   label { display: block; font-size: 14px; color: var(--muted); margin: 12px 0 4px; }
   .row { display: flex; gap: 8px; align-items: center; }
   input[type=text], input[type=password] {
     width: 100%; padding: 11px 12px; font-size: 16px; color: var(--text); background: var(--field);
     border: 1px solid var(--line); border-radius: 8px; }
-  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  input:focus { outline: 2px solid var(--accent-text); outline-offset: -1px; }
+  input[type=checkbox] { accent-color: var(--accent); }
   input[aria-invalid=true] { border-color: var(--bad); }
   .check { display: flex; align-items: center; gap: 8px; color: var(--text); margin-top: 12px; font-size: 15px; }
-  button { font-size: 16px; padding: 12px 14px; border-radius: 8px; border: 0; cursor: pointer; }
-  button.primary { background: var(--accent); color: #fff; width: 100%; }
-  button.link { background: none; color: var(--accent); padding: 0 4px; font-size: 14px; }
+  button { font-size: 16px; padding: 12px 14px; border-radius: 999px; border: 0; cursor: pointer; font-family: inherit; }
+  button.primary { background: var(--accent); color: var(--on-accent); width: 100%; font-weight: 600;
+                   box-shadow: 0 6px 20px rgba(85, 107, 47, .35); }
+  button.link { background: none; color: var(--accent-text); padding: 0 4px; font-size: 14px; }
   button:disabled { opacity: .5; cursor: default; }
   #msg, #l_msg { min-height: 1.4em; margin: 10px 0 0; font-size: 14px; color: var(--bad); }
   .done h2 { color: var(--ok); }
   .done ol { padding-left: 20px; margin: 8px 0 0; }
   .done li { margin: 6px 0; }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+  .hero { display: block; width: 160px; height: 160px; margin: 8px auto 4px; }
+  #login h1, #login .sub { text-align: center; }
 </style>
 </head>
 <body>
 <main>
   <form id="login" hidden novalidate>
+    <img class="hero" src="/board.webp" alt="" width="160" height="160">
     <h1>Sign in to set up</h1>
     <p class="sub">This meshpoint has not been set up yet. Sign in with the default user name and
       password from its instructions.</p>

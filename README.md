@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/images/openmanet-32.webp" alt="OpenMANET-32" width="225"></p>
+
 # openmanet-32
 
 An ESP32-S3 with a Wi-Fi HaLow radio that joins an OpenMANET mesh as
@@ -13,7 +15,8 @@ extend the mesh.
   selection and forwarding, translation table, fragments, `batctl ping` and `traceroute`
   replies. Written from the Linux kernel source.
 - **Hotspot and web page** (`main/hotspot.c`): a 2.4 GHz access point with NAT into the mesh,
-  a first-boot setup page, and a status and settings page behind a root sign-in.
+  a first-boot setup page, and a status and settings page behind a root sign-in, styled in
+  OpenMANET's colors.
 
 Nothing about your network is built into the firmware. A freshly flashed board starts in
 setup mode and asks for the mesh name and password on its setup page.

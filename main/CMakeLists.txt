@@ -3,6 +3,7 @@ idf_component_register(
     INCLUDE_DIRS "."
     REQUIRES halow nvs_flash esp_wifi esp_netif esp_event esp_timer lwip esp_driver_spi esp_driver_gpio mbedtls esp_http_server json
     EMBED_TXTFILES "page.html" "setup.html"
+    EMBED_FILES "board.webp"
 )
 
 # esp-halow workarounds and the mesh layer's morselib hooks (see mesh.c).
