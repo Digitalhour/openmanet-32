@@ -18,12 +18,19 @@ extend the mesh.
 Nothing about your network is built into the firmware. A freshly flashed board starts in
 setup mode and asks for the mesh name and password on its setup page.
 
+**Building one?** Follow the step-by-step guide, [docs/HOWTO.md](docs/HOWTO.md). It covers
+parts, reading your mesh settings, installing the toolchain, flashing, setup and
+troubleshooting. The rest of this page is the short version.
+
 ## Hardware
 
-- Seeed Studio XIAO ESP32S3 (8 MB flash, 8 MB PSRAM)
-- Seeed Wio-WM6180 Wi-Fi HaLow module (Morse Micro MM6108)
+- Seeed Studio XIAO ESP32S3 (8 MB flash, 8 MB PSRAM), with its 2.4 GHz antenna
+- Wio-WM6180 Wi-Fi HaLow Module for XIAO (Seeed 109100041; Quectel FGH100M-H, Morse Micro
+  MM6108, 902 to 928 MHz)
+- A 900 MHz antenna for the HaLow module. Attach it before powering the board.
 
-The pin map is in `sdkconfig.defaults.esp32s3`. On USB power the HaLow transmit power is capped
+Seeed's [Getting Started with Wi-Fi HaLow Module for XIAO](https://wiki.seeedstudio.com/getting_started_with_wifi_halow_module_for_xiao/)
+shows how the two boards fit together. The pin map is in `sdkconfig.defaults.esp32s3`. On USB power the HaLow transmit power is capped
 at 8 dBm and the hotspot at 11 dBm, because the two radios together can draw more than a USB
 port supplies. Raise `HOP_TX_DBM` for a node with a proper supply.
 
@@ -46,6 +53,10 @@ idf.py set-target esp32s3
 idf.py build
 idf.py -p /dev/cu.usbmodemXXXX flash monitor
 ```
+
+The radio settings default to OpenMANET's US defaults. If your mesh uses others, change
+them before building (see [Radio settings](#radio-settings) and step 3 of the
+[how-to](docs/HOWTO.md#3-read-your-mesh-settings-from-an-openmanet-node)).
 
 ## First-time setup
 
@@ -123,9 +134,14 @@ things the standards don't tell you. They are all documented in the comments of
 - **PMF:** with protected management frames required, HWMP path requests arrive protected,
   and path replies must be protected too, or unicast never works.
 
-`docs/batman-adv-on-esp32.md` has the research notes behind the batman-adv implementation.
-`docs/openmanet-test-mesh.sh` (and its undo script) moves an OpenMANET node to an open test
-mesh, which helps tell radio problems from encryption problems.
+## Documentation
+
+- [docs/HOWTO.md](docs/HOWTO.md): the step-by-step build and setup guide, with
+  troubleshooting.
+- [docs/batman-adv-on-esp32.md](docs/batman-adv-on-esp32.md): the research notes behind the
+  batman-adv implementation.
+- [docs/openmanet-test-mesh.sh](docs/openmanet-test-mesh.sh) and its undo script: move an
+  OpenMANET node to an open test mesh, to tell radio problems from encryption problems.
 
 ## Status and known gaps
 
