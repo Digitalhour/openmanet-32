@@ -25,6 +25,18 @@ setup mode and asks for the mesh name and password on its setup page.
 parts, reading your mesh settings, installing the toolchain, flashing, setup and
 troubleshooting. The rest of this page is the short version.
 
+## Screenshots
+
+The meshpoint's own web page, on a phone (made-up data from `tools/preview.py`):
+
+| Status | Nodes and mesh topology | Menu |
+|:---:|:---:|:---:|
+| <img src="docs/images/screenshots/status.webp" width="240" alt="Status screen: linked to 2 nodes, mesh, HaLow channel, address, hotspot and uptime cards"> | <img src="docs/images/screenshots/nodes.webp" width="240" alt="Nodes screen: mesh topology map with signal on each link, and the nearby nodes list"> | <img src="docs/images/screenshots/menu.webp" width="240" alt="Side menu: status, nodes, settings, speed test, device"> |
+
+| HaLow radio | Speed test | Sign-in | First-boot setup |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/images/screenshots/radio.webp" width="180" alt="HaLow radio settings: width, channel with frequency, primary width and index, beacon, transmit power"> | <img src="docs/images/screenshots/speedtest.webp" width="180" alt="Speed test: HaLow throughput from a node, and phone to meshpoint download and upload"> | <img src="docs/images/screenshots/signin.webp" width="180" alt="Sign-in screen with the board picture"> | <img src="docs/images/screenshots/setup.webp" width="180" alt="Setup wizard: new root password and OpenMANET network"> |
+
 ## Hardware
 
 - Seeed Studio XIAO ESP32S3 (8 MB flash, 8 MB PSRAM), with its 2.4 GHz antenna

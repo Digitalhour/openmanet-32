@@ -45,7 +45,7 @@ CHANNELS = [{"chan": c, "mhz": f / 1e6, "bw": bw, "op": op} for c, f, bw, op in 
 
 RADIO = {"chan": 28, "prim_bw": 0, "prim_idx": -1, "beacon": 1000, "tx_dbm": 8, "ap_chan": 6}
 
-# A pretend speed test: about 0.2 Mbit/s from a node, like a relayed HaLow hop.
+# A pretend speed test: about 1.1 Mbit/s from a node, like a direct HaLow hop to a XIAO.
 TEST = {"state": "idle", "url": "", "start": 0.0, "seconds": 10}
 
 
@@ -53,7 +53,7 @@ def speedtest():
     if TEST["state"] == "idle":
         return {"state": "idle", "url": "", "bytes": 0, "ms": 0, "seconds": 0, "downloads": 0, "mbps": 0, "message": ""}
     ms = int(min(time.time() - TEST["start"], TEST["seconds"]) * 1000)
-    mbps = 0.21 + random.uniform(-0.03, 0.03)
+    mbps = 1.1 + random.uniform(-0.08, 0.08)
     bytes_ = int(mbps * 1e6 / 8 * ms / 1000)
     state = "running" if ms < TEST["seconds"] * 1000 else "done"
     return {"state": state, "url": TEST["url"], "bytes": bytes_, "ms": ms, "seconds": TEST["seconds"],
