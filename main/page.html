@@ -165,6 +165,25 @@
   .mi small { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mi.red { color: var(--bad); }
 
+  /* Mesh topology */
+  .topo-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 6px; }
+  #topo { display: block; width: 100%; height: auto; }
+  #topo .link { stroke-width: 2; }
+  #topo .link.ok { stroke: var(--accent-text); }
+  #topo .link.warn { stroke: var(--warn); stroke-dasharray: 5 4; }
+  #topo .link.hop { stroke: var(--muted); stroke-dasharray: 2 4; }
+  #topo .lbl { font: 600 10px system-ui, sans-serif; fill: var(--text); }
+  #topo .lbl-bg { fill: var(--bg); }
+  #topo .lbl, #topo .lbl-bg { pointer-events: none; }
+  #topo .box { fill: var(--card-hi); stroke: rgba(255, 255, 255, .14); stroke-width: 1; cursor: pointer; }
+  #topo .box.me { fill: rgba(85, 107, 47, .3); stroke: var(--accent-text); }
+  #topo .box.sel { stroke: var(--text); stroke-width: 2; }
+  #topo .t1 { font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace; fill: var(--text); pointer-events: none; }
+  #topo .t1.name { font: 700 12px system-ui, sans-serif; }
+  #topo .t2 { font: 10px system-ui, sans-serif; fill: var(--muted); pointer-events: none; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); padding: 2px 10px 8px; }
+  .legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
+
   /* Speed test */
   .meter { display: flex; align-items: baseline; gap: 8px; margin-top: 14px; }
   .meter b { font-size: 40px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
@@ -299,6 +318,17 @@
 
   <!-- Nodes -->
   <section class="view" data-view="nodes" data-title="Nodes">
+    <h2>Mesh topology</h2>
+    <div class="topo-card">
+      <svg id="topo" viewBox="0 0 400 420" role="img" aria-label="Mesh topology"></svg>
+      <div class="legend">
+        <span><i style="border-color: var(--accent-text)"></i>linked</span>
+        <span><i style="border-color: var(--warn); border-top-style: dashed"></i>not linked</span>
+        <span><i style="border-color: var(--muted); border-top-style: dotted"></i>reached through</span>
+      </div>
+    </div>
+    <p class="hint" id="topo_info">This meshpoint's view of the 802.11s mesh, like the Mesh Topology on an
+      OpenMANET node's home page. Tap a node for details.</p>
     <h2>Nearby nodes</h2>
     <div class="list" id="peers"></div>
     <p class="hint" id="nodes"></p>
@@ -587,6 +617,7 @@ async function refresh() {
     row.append(bars(p.rssi), t, pill);
     list.appendChild(row);
   }
+  drawTopology(st);
   $("nodes").textContent = st.peers.length
     ? peered + " of " + st.peers.length + " nearby nodes linked; " + st.nodes.length + " reachable across the mesh."
     : "The meshpoint keeps listening on its HaLow channel.";
@@ -600,6 +631,105 @@ async function refresh() {
   }
   $("ro").hidden = canEdit;
   applyLock();
+}
+
+/* ---------- Mesh topology ---------- */
+
+/* This meshpoint in the middle, the nodes it hears directly (802.11s neighbours) on a ring with
+ * their signal, and nodes batman-adv reaches through one of them further out. */
+const SVGNS = "http://www.w3.org/2000/svg";
+let topoSel = null, topoLast = null;
+
+function svgEl(tag, attrs, text) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function topoLabel(g, x, y, text) {
+  const t = svgEl("text", { x, y: y + 3.5, "text-anchor": "middle", class: "lbl" }, text);
+  const w = text.length * 6 + 8;
+  g.appendChild(svgEl("rect", { x: x - w / 2, y: y - 8, width: w, height: 16, rx: 8, class: "lbl-bg" }));
+  g.appendChild(t);
+}
+
+function topoDetails(mac) {
+  const st = topoLast;
+  if (!st) return;
+  if (mac === "me") {
+    $("topo_info").textContent = st.ap_ssid + " (this meshpoint): HaLow MAC " + (st.mesh_mac || "?") +
+      ", mesh address " + (st.mesh_ip || "?") + ", " + st.peers.filter((p) => p.peered).length + " linked.";
+    return;
+  }
+  const p = st.peers.find((x) => x.mac === mac);
+  const n = st.nodes.find((x) => x.mac === mac);
+  const parts = [mac];
+  if (p) parts.push(p.peered ? "linked directly" : "heard directly, " + p.state, p.rssi + " dBm");
+  else if (n) parts.push("reached through " + n.via);
+  if (n) parts.push("batman-adv link estimate " + n.mbps + " Mbit/s");
+  $("topo_info").textContent = parts.join(", ") + ".";
+}
+
+function drawTopology(st) {
+  topoLast = st;
+  const svg = $("topo");
+  svg.textContent = "";
+  const W = 400, H = 420, cx = W / 2, cy = H / 2, BW = 88, BH = 38;
+  const peers = st.peers || [];
+  const others = (st.nodes || []).filter((n) => !peers.some((p) => p.mac === n.mac));
+  const shortMac = (m) => m.slice(-8);   /* last three bytes; the full MAC is in the details */
+  const pos = {};
+  peers.forEach((p, i) => {
+    const a = -Math.PI / 2 + i * 2 * Math.PI / peers.length;
+    pos[p.mac] = { x: cx + 105 * Math.cos(a), y: cy + 100 * Math.sin(a), a };
+  });
+  /* Nodes reached through a neighbour go further out, turned away from the horizontal so
+   * their boxes clear the neighbour's. */
+  const byVia = {};
+  for (const n of others) (byVia[n.via] = byVia[n.via] || []).push(n);
+  for (const via in byVia) {
+    const base = pos[via] || { a: Math.PI / 2 };
+    const sgn = Math.sign(Math.cos(base.a) * Math.sin(base.a)) || 1;
+    byVia[via].forEach((n, j) => {
+      const a = base.a + sgn * (0.38 + j * 0.42);
+      pos[n.mac] = { x: cx + 165 * Math.cos(a), y: cy + 185 * Math.sin(a), a };
+    });
+  }
+  for (const k in pos) {
+    pos[k].x = Math.min(W - BW / 2 - 2, Math.max(BW / 2 + 2, pos[k].x));
+    pos[k].y = Math.min(H - BH / 2 - 2, Math.max(BH / 2 + 2, pos[k].y));
+  }
+
+  const links = svgEl("g", {}), labels = svgEl("g", {}), boxes = svgEl("g", {});
+  svg.append(links, boxes, labels);   /* labels last, so a box never hides one */
+  for (const p of peers) {
+    const q = pos[p.mac];
+    links.appendChild(svgEl("line", { x1: cx, y1: cy, x2: q.x, y2: q.y, class: "link " + (p.peered ? "ok" : "warn") }));
+    topoLabel(labels, cx + (q.x - cx) * 0.62, cy + (q.y - cy) * 0.62, p.rssi + " dBm");
+  }
+  for (const n of others) {
+    const q = pos[n.mac], v = pos[n.via];
+    if (v) links.appendChild(svgEl("line", { x1: v.x, y1: v.y, x2: q.x, y2: q.y, class: "link hop" }));
+  }
+
+  const box = (key, x, y, w, line1, line2, cls, name) => {
+    const g = svgEl("g", {});
+    g.appendChild(svgEl("rect", { x: x - w / 2, y: y - BH / 2, width: w, height: BH, rx: 10,
+      class: "box" + (cls ? " " + cls : "") + (topoSel === key ? " sel" : "") }));
+    g.appendChild(svgEl("text", { x, y: y - 3, "text-anchor": "middle", class: "t1" + (name ? " name" : "") }, line1));
+    g.appendChild(svgEl("text", { x, y: y + 11, "text-anchor": "middle", class: "t2" }, line2));
+    g.appendChild(svgEl("title", {}, key === "me" ? "This meshpoint" : key));
+    g.addEventListener("click", () => { topoSel = key; topoDetails(key); drawTopology(topoLast); });
+    boxes.appendChild(g);
+  };
+  box("me", cx, cy, 128, (st.ap_ssid || "This meshpoint").slice(0, 18), st.mesh_ip || "this meshpoint", "me", true);
+  for (const p of peers) box(p.mac, pos[p.mac].x, pos[p.mac].y, BW, shortMac(p.mac), p.peered ? "linked" : p.state);
+  for (const n of others) if (pos[n.via]) box(n.mac, pos[n.mac].x, pos[n.mac].y, BW, shortMac(n.mac), "2 hops");
+  if (!peers.length) {
+    svg.appendChild(svgEl("text", { x: cx, y: cy + 50, "text-anchor": "middle", class: "t2" }, "No mesh nodes heard yet"));
+  }
+  if (topoSel) topoDetails(topoSel);
 }
 
 /* ---------- Actions ---------- */

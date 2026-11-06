@@ -78,9 +78,12 @@ def status(setup):
     }
     if not setup:
         st["mesh_ip"] = "10.41.250.251"
+        st["mesh_mac"] = "3e:1a:cc:00:81:fa"
         st["peers"] = [{"mac": m, "rssi": r + random.randint(-3, 3), "state": s, "peered": s == "peered"}
                        for m, r, s in PEERS]
         st["nodes"] = [{"mac": m, "via": m, "mbps": 10} for m, _, s in PEERS if s == "peered"]
+        # One node out of direct range, reached through the second neighbour.
+        st["nodes"].append({"mac": "5c:ba:75:00:74:22", "via": PEERS[1][0], "mbps": 0.8})
     return st
 
 

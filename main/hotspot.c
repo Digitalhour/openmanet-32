@@ -360,6 +360,13 @@ static esp_err_t status_get(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "uptime_s", (double)(esp_timer_get_time() / 1000000));
 
     char buf[18];
+    if (!s_setup)
+    {
+        uint8_t me[6];
+        mesh_get_addr(me);   /* the HaLow MAC other nodes know this meshpoint by */
+        mac_str(me, buf);
+        cJSON_AddStringToObject(root, "mesh_mac", buf);
+    }
     esp_netif_ip_info_t ip;
     if (s_mesh_netif != NULL && esp_netif_get_ip_info(s_mesh_netif, &ip) == ESP_OK)
     {
