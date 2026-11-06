@@ -165,6 +165,16 @@
   .mi small { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mi.red { color: var(--bad); }
 
+  /* Speed test */
+  .meter { display: flex; align-items: baseline; gap: 8px; margin-top: 14px; }
+  .meter b { font-size: 40px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .meter span { color: var(--muted); }
+  .bar { height: 6px; background: rgba(255, 255, 255, .08); border-radius: 999px; overflow: hidden; margin-top: 10px; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--accent-text); transition: width .3s linear; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .pair button.primary { margin-top: 14px; }
+  .pair .meter b { font-size: 28px; }
+
   /* Toast */
   .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 40;
            transform: translate(-50%, 20px); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
@@ -251,6 +261,40 @@
   </template>
   <section class="view" data-view="device" data-title="Device">
     <div class="device-info"></div>
+  </section>
+
+  <!-- Speed test -->
+  <section class="view" data-view="speed" data-title="Speed test">
+    <h2>HaLow: from a node to this meshpoint</h2>
+    <div class="form-card">
+      <label for="st_ip">Node address</label>
+      <input type="text" id="st_ip" inputmode="decimal" placeholder="10.41.x.x" autocapitalize="off" spellcheck="false">
+      <div class="grid2">
+        <div><label for="st_secs">Length</label>
+          <select id="st_secs"><option value="5">5 seconds</option><option value="10" selected>10 seconds</option><option value="20">20 seconds</option><option value="30">30 seconds</option></select></div>
+        <div><label for="st_path">File</label>
+          <input type="text" id="st_path" value="/luci-static/openmanetargon/img/logo2.webp" autocapitalize="off" spellcheck="false"></div>
+      </div>
+      <div class="meter"><b id="st_mbps">&ndash;</b><span>Mbit/s</span></div>
+      <div class="bar"><i id="st_bar"></i></div>
+      <p class="hint" id="st_info">The meshpoint downloads a file from the node's web page over the mesh and times it.
+        Use the address you open that node's web page at.</p>
+    </div>
+    <button type="button" class="primary" id="st_go">Start</button>
+
+    <h2>This device and the meshpoint</h2>
+    <div class="form-card">
+      <div class="pair">
+        <div><div class="meter"><b id="dv_down">&ndash;</b><span>down</span></div>
+          <button type="button" class="primary" id="dv_down_go">Download</button></div>
+        <div><div class="meter"><b id="dv_up">&ndash;</b><span>up</span></div>
+          <button type="button" class="primary" id="dv_up_go">Upload</button></div>
+      </div>
+      <div class="bar"><i id="dv_bar"></i></div>
+      <p class="hint" id="dv_info">Mbit/s between this phone or laptop and the meshpoint, 8 seconds each way. On the
+        meshpoint's own hotspot this measures the 2.4 GHz Wi-Fi. From a device on another node's
+        Wi-Fi, open this page at the meshpoint's mesh address to include the HaLow link.</p>
+    </div>
   </section>
 
   <!-- Nodes -->
@@ -355,6 +399,8 @@
     <a class="mi" href="#radio" data-go="radio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-8"/><circle cx="12" cy="10" r="2"/><path d="M8 6a6 6 0 0 0 0 8M16 6a6 6 0 0 1 0 8M5 3a10 10 0 0 0 0 14M19 3a10 10 0 0 1 0 14"/></svg><span class="t">HaLow radio<small id="sum-radio"></small></span></a>
     <a class="mi" href="#hotspot" data-go="hotspot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1"/></svg><span class="t">Hotspot<small id="sum-ap"></small></span></a>
     <a class="mi" href="#root" data-go="root"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="t">Root password<small>user root</small></span></a>
+    <h3>Tools</h3>
+    <a class="mi" href="#speed" data-go="speed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14l4-4"/><path d="M3.3 17a9 9 0 1 1 17.4 0"/><circle cx="12" cy="14" r="1.5"/></svg><span class="t">Speed test<small>HaLow and Wi-Fi throughput</small></span></a>
     <h3>Device</h3>
     <a class="mi" href="#device" data-go="device"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M10 7h4M10 11h4M11 17h2"/></svg><span class="t">Device details<small>Addresses, channels, uptime</small></span></a>
     <a class="mi red" href="#reset" data-go="reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg><span class="t">Start over<small>Erase all settings</small></span></a>
@@ -652,6 +698,116 @@ $("login").addEventListener("submit", async (e) => {
 $("logout").addEventListener("click", async () => {
   try { await post("/api/logout"); } catch (err) {}
   showLogin("Signed out.");
+});
+
+/* ---------- Speed test ---------- */
+
+let stTimer = null, testing = false;
+const fmt = (mbps) => mbps >= 10 ? mbps.toFixed(1) : mbps.toFixed(2);
+try { $("st_ip").value = localStorage.getItem("st_ip") || ""; } catch (e) {}
+
+function stButtons() {
+  for (const id of ["st_go", "dv_down_go", "dv_up_go"]) $(id).disabled = testing;
+}
+
+function showNodeTest(t) {
+  if (t.state === "idle") return;
+  const pct = t.seconds ? Math.min(100, t.ms / (t.seconds * 10)) : 0;
+  $("st_bar").style.width = (t.state === "running" ? pct : 100) + "%";
+  $("st_mbps").textContent = t.ms ? fmt(t.mbps) : "\u2013";
+  const kb = Math.round(t.bytes / 1024);
+  if (t.state === "failed") $("st_info").textContent = t.message + " (" + t.url + ")";
+  else $("st_info").textContent = (t.state === "running" ? "Running: " : "Done: ") + kb + " KB in " +
+    (t.ms / 1000).toFixed(1) + " s, " + t.downloads + (t.downloads === 1 ? " download" : " downloads") + " from " + t.url;
+}
+
+async function pollNodeTest() {
+  let t;
+  try {
+    const r = await fetch("/api/speedtest", { cache: "no-store" });
+    if (r.status === 401) { clearInterval(stTimer); testing = false; stButtons(); showLogin("Signed out. Sign in again."); return; }
+    t = await r.json();
+  } catch (e) { return; }
+  showNodeTest(t);
+  if (t.state !== "running") {
+    clearInterval(stTimer); stTimer = null; testing = false; stButtons();
+    if (t.state === "failed") say(t.message, "bad");
+  }
+}
+
+$("st_go").addEventListener("click", async () => {
+  const ip = $("st_ip").value.trim();
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return say("Enter the node's IP address, like 10.41.122.191.", "bad");
+  try { localStorage.setItem("st_ip", ip); } catch (e) {}
+  testing = true; stButtons();
+  $("st_mbps").textContent = "\u2013"; $("st_bar").style.width = "0";
+  $("st_info").textContent = "Starting\u2026";
+  const r = await post("/api/speedtest", { ip, path: $("st_path").value.trim(), seconds: Number($("st_secs").value) });
+  if (relogin(r)) { testing = false; stButtons(); return; }
+  if (!r.ok) { testing = false; stButtons(); $("st_info").textContent = r.message; return say(r.message, "bad"); }
+  stTimer = setInterval(pollNodeTest, 500);
+});
+
+/* This device: stream from the meshpoint, or upload to it, for a fixed time. */
+const DV_SECONDS = 8;
+function dvProgress(t0, bytes, el) {
+  const s = (performance.now() - t0) / 1000;
+  $("dv_bar").style.width = Math.min(100, s / DV_SECONDS * 100) + "%";
+  if (s > 0.3) $(el).textContent = fmt(bytes * 8 / s / 1e6);
+  return s;
+}
+
+$("dv_down_go").addEventListener("click", async () => {
+  testing = true; stButtons();
+  $("dv_down").textContent = "\u2013"; $("dv_bar").style.width = "0";
+  const ctl = new AbortController();
+  const t0 = performance.now();
+  let bytes = 0, s = 0;
+  const stop = setTimeout(() => ctl.abort(), DV_SECONDS * 1000);
+  try {
+    const r = await fetch("/api/speedtest/data?bytes=67108864", { cache: "no-store", signal: ctl.signal });
+    if (r.status === 401) { showLogin("Signed out. Sign in again."); return; }
+    const rd = r.body.getReader();
+    for (;;) {
+      const { done, value } = await rd.read();
+      if (done) break;
+      bytes += value.length;
+      s = dvProgress(t0, bytes, "dv_down");
+    }
+  } catch (e) {}
+  clearTimeout(stop);
+  s = (performance.now() - t0) / 1000;
+  $("dv_down").textContent = bytes ? fmt(bytes * 8 / s / 1e6) : "\u2013";
+  $("dv_bar").style.width = "100%";
+  $("dv_info").textContent = "Download: " + Math.round(bytes / 1024) + " KB in " + s.toFixed(1) + " s.";
+  testing = false; stButtons();
+});
+
+$("dv_up_go").addEventListener("click", async () => {
+  testing = true; stButtons();
+  $("dv_up").textContent = "\u2013"; $("dv_bar").style.width = "0";
+  const chunk = new Uint8Array(128 * 1024);
+  const t0 = performance.now();
+  let bytes = 0, s = 0, failed = false;
+  while ((performance.now() - t0) / 1000 < DV_SECONDS) {
+    try {
+      const r = await fetch("/api/speedtest/sink", { method: "POST", body: chunk, cache: "no-store" });
+      if (r.status === 401) { showLogin("Signed out. Sign in again."); testing = false; stButtons(); return; }
+      if (!r.ok) { failed = true; break; }
+      bytes += chunk.length;
+      s = dvProgress(t0, bytes, "dv_up");
+    } catch (e) { failed = true; break; }
+  }
+  s = (performance.now() - t0) / 1000;
+  $("dv_up").textContent = bytes ? fmt(bytes * 8 / s / 1e6) : "\u2013";
+  $("dv_bar").style.width = "100%";
+  $("dv_info").textContent = "Upload: " + Math.round(bytes / 1024) + " KB in " + s.toFixed(1) + " s." + (failed ? " The meshpoint stopped answering." : "");
+  testing = false; stButtons();
+});
+
+/* Show the last HaLow result when the screen opens. */
+window.addEventListener("hashchange", () => {
+  if (location.hash === "#speed" && !stTimer) fetch("/api/speedtest", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((t) => { if (t) showNodeTest(t); }).catch(() => {});
 });
 
 refresh();

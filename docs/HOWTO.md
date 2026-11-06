@@ -247,6 +247,10 @@ About 20 seconds after Finish:
   one first and signs everyone out.
 - Settings can only be changed from the meshpoint's own hotspot. Signed in over the mesh,
   you can look but not change anything.
+- **Speed test** (☰ menu): enter an OpenMANET node's IP address and the meshpoint downloads a
+  file from that node's web page for 10 seconds, showing Mbit/s over HaLow. The second test
+  times downloads and uploads between your phone and the meshpoint. On the meshpoint's own
+  hotspot that measures the 2.4 GHz Wi-Fi.
 - Placement: higher is better for HaLow. Keep the antenna vertical and clear of metal, and
   use a power supply that can deliver 2 A.
 

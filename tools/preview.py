@@ -45,6 +45,21 @@ CHANNELS = [{"chan": c, "mhz": f / 1e6, "bw": bw, "op": op} for c, f, bw, op in 
 
 RADIO = {"chan": 28, "prim_bw": 0, "prim_idx": -1, "beacon": 1000, "tx_dbm": 8, "ap_chan": 6}
 
+# A pretend speed test: about 0.2 Mbit/s from a node, like a relayed HaLow hop.
+TEST = {"state": "idle", "url": "", "start": 0.0, "seconds": 10}
+
+
+def speedtest():
+    if TEST["state"] == "idle":
+        return {"state": "idle", "url": "", "bytes": 0, "ms": 0, "seconds": 0, "downloads": 0, "mbps": 0, "message": ""}
+    ms = int(min(time.time() - TEST["start"], TEST["seconds"]) * 1000)
+    mbps = 0.21 + random.uniform(-0.03, 0.03)
+    bytes_ = int(mbps * 1e6 / 8 * ms / 1000)
+    state = "running" if ms < TEST["seconds"] * 1000 else "done"
+    return {"state": state, "url": TEST["url"], "bytes": bytes_, "ms": ms, "seconds": TEST["seconds"],
+            "downloads": bytes_ // 221432, "mbps": round(mbps, 3), "message": ""}
+
+
 PEERS = [("5c:ba:75:00:71:ec", -48, "peered"), ("5c:ba:75:00:72:07", -61, "peered"),
          ("5c:ba:75:00:73:10", -84, "listen")]
 
@@ -109,6 +124,20 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, json.dumps({"country": "US", "ap_max_chan": 11, "channels": CHANNELS,
                                                   "saved": RADIO}))
             return self.send(200, json.dumps(status("/setup" in self.referer())))
+        if path == "/api/speedtest":
+            return self.send(200, json.dumps(speedtest()))
+        if path == "/api/speedtest/data":
+            # Stream zeros at about 4 Mbit/s, like a phone on the 2.4 GHz hotspot.
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.end_headers()
+            try:
+                for _ in range(2000):
+                    self.wfile.write(bytes(16384))
+                    time.sleep(16384 * 8 / 4e6)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
         self.send(404, "not found", "text/plain")
 
     def do_POST(self):
@@ -117,6 +146,18 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/login":
             return self.send(401, json.dumps({"ok": False, "message":
                                               "Preview: sign-in isn't simulated. Open the page without ?login."}))
+        if self.path == "/api/speedtest":
+            try:
+                req = json.loads(body or b"{}")
+            except ValueError:
+                req = {}
+            ip = str(req.get("ip", ""))
+            TEST.update(state="running", url="http://%s%s" % (ip, req.get("path") or "/"), start=time.time(),
+                        seconds=int(req.get("seconds") or 10))
+            return self.send(200, json.dumps({"ok": True, "message": "Started"}))
+        if self.path == "/api/speedtest/sink":
+            time.sleep(len(body) * 8 / 3e6)   # about 3 Mbit/s up
+            return self.send(200, json.dumps({"ok": True, "bytes": len(body)}))
         if self.path == "/api/settings":
             try:
                 radio = json.loads(body or b"{}").get("radio")

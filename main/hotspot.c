@@ -23,6 +23,7 @@
 #include "captive_dns.h"
 #include "mesh.h"
 #include "radio.h"
+#include "speedtest.h"
 
 static const char *TAG = "hotspot";
 
@@ -548,6 +549,141 @@ static bool take(const cJSON *root, const char *key, char *out, size_t size, boo
     return true;
 }
 
+/* ---------- Speed tests ---------- */
+
+/* The meshpoint downloads from another node's web server and times it (speedtest.c). */
+static esp_err_t speedtest_get_handler(httpd_req_t *req)
+{
+    if (!signed_in(req))
+    {
+        return need_login(req);
+    }
+    struct speedtest_status st;
+    speedtest_get(&st);
+    static const char *const names[] = { "idle", "running", "done", "failed" };
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "state", names[st.state]);
+    cJSON_AddStringToObject(root, "url", st.url);
+    cJSON_AddNumberToObject(root, "bytes", (double)st.bytes);
+    cJSON_AddNumberToObject(root, "ms", st.elapsed_ms);
+    cJSON_AddNumberToObject(root, "seconds", st.seconds);
+    cJSON_AddNumberToObject(root, "downloads", st.requests);
+    cJSON_AddNumberToObject(root, "mbps", st.elapsed_ms ? (double)st.bytes * 8 / st.elapsed_ms / 1000 : 0);
+    cJSON_AddStringToObject(root, "message", st.message);
+    return send_json(req, root);
+}
+
+static esp_err_t speedtest_start_handler(httpd_req_t *req)
+{
+    if (!signed_in(req))
+    {
+        return need_login(req);
+    }
+    char ip[24] = "", path[104] = "/luci-static/openmanetargon/img/logo2.webp";
+    char body[256];
+    if (read_body(req, body, sizeof(body)) < 0)
+    {
+        return send_result(req, "400 Bad Request", false, "Bad request");
+    }
+    cJSON *root = cJSON_Parse(body);
+    if (root == NULL)
+    {
+        return send_result(req, "400 Bad Request", false, "Not JSON");
+    }
+    bool fits = take(root, "ip", ip, sizeof(ip), false);
+    const cJSON *pv = cJSON_GetObjectItemCaseSensitive(root, "path");
+    if (cJSON_IsString(pv) && pv->valuestring[0] != '\0')
+    {
+        fits &= take(root, "path", path, sizeof(path), false);
+    }
+    const cJSON *sv = cJSON_GetObjectItemCaseSensitive(root, "seconds");
+    uint32_t seconds = cJSON_IsNumber(sv) ? (uint32_t)sv->valueint : 10;
+    cJSON_Delete(root);
+    if (!fits)
+    {
+        return send_result(req, "400 Bad Request", false, "A value is too long");
+    }
+    esp_err_t err = speedtest_start(ip, path, seconds);
+    if (err == ESP_ERR_INVALID_STATE)
+    {
+        return send_result(req, "409 Conflict", false, "A speed test is already running");
+    }
+    if (err == ESP_ERR_INVALID_ARG)
+    {
+        return send_result(req, "400 Bad Request", false, "Enter the node's IP address, like 10.41.122.191");
+    }
+    if (err != ESP_OK)
+    {
+        return send_result(req, "500 Internal Server Error", false, "Could not start the test");
+    }
+    log_peer("Speed test started", req);
+    return send_result(req, "200 OK", true, "Started");
+}
+
+/* For a phone or laptop: download this many bytes from the meshpoint (up to 64 MB). The page
+ * stops reading after a few seconds and times what arrived. While this runs, other requests
+ * to the page wait (the web server handles one at a time). */
+static esp_err_t speedtest_data_handler(httpd_req_t *req)
+{
+    if (!signed_in(req))
+    {
+        return need_login(req);
+    }
+    char q[48], v[16];
+    long want = 4L * 1024 * 1024;
+    if (httpd_req_get_url_query_str(req, q, sizeof(q)) == ESP_OK && httpd_query_key_value(q, "bytes", v, sizeof(v)) == ESP_OK)
+    {
+        want = strtol(v, NULL, 10);
+    }
+    if (want < 1 || want > 64L * 1024 * 1024)
+    {
+        return send_result(req, "400 Bad Request", false, "bytes must be 1 to 67108864");
+    }
+    static char fill[4096];   /* zeros */
+    httpd_resp_set_type(req, "application/octet-stream");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    long sent = 0;
+    while (sent < want)
+    {
+        long n = want - sent < (long)sizeof(fill) ? want - sent : (long)sizeof(fill);
+        if (httpd_resp_send_chunk(req, fill, n) != ESP_OK)
+        {
+            return ESP_FAIL;   /* the page stopped reading: normal at the end of a test */
+        }
+        sent += n;
+    }
+    return httpd_resp_send_chunk(req, NULL, 0);
+}
+
+/* For a phone or laptop: upload to the meshpoint, which reads and drops it. */
+static esp_err_t speedtest_sink_handler(httpd_req_t *req)
+{
+    if (!signed_in(req))
+    {
+        return need_login(req);
+    }
+    static char buf[4096];
+    size_t left = req->content_len, got = 0;
+    while (left > 0)
+    {
+        int n = httpd_req_recv(req, buf, left < sizeof(buf) ? left : sizeof(buf));
+        if (n == HTTPD_SOCK_ERR_TIMEOUT)
+        {
+            continue;
+        }
+        if (n <= 0)
+        {
+            return ESP_FAIL;
+        }
+        left -= (size_t)n;
+        got += (size_t)n;
+    }
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "ok", true);
+    cJSON_AddNumberToObject(root, "bytes", (double)got);
+    return send_json(req, root);
+}
+
 static esp_err_t settings_post(httpd_req_t *req)
 {
     if (!signed_in(req))
@@ -784,7 +920,7 @@ static void web_start(void)
     cfg.stack_size = 8192;
     cfg.lru_purge_enable = true;
     cfg.max_open_sockets = 5;
-    cfg.max_uri_handlers = 12;
+    cfg.max_uri_handlers = 16;
     httpd_handle_t server = NULL;
     if (httpd_start(&server, &cfg) != ESP_OK)
     {
@@ -802,6 +938,10 @@ static void web_start(void)
         { .uri = "/api/login", .method = HTTP_POST, .handler = login_post },
         { .uri = "/api/logout", .method = HTTP_POST, .handler = logout_post },
         { .uri = "/api/password", .method = HTTP_POST, .handler = password_post },
+        { .uri = "/api/speedtest", .method = HTTP_GET, .handler = speedtest_get_handler },
+        { .uri = "/api/speedtest", .method = HTTP_POST, .handler = speedtest_start_handler },
+        { .uri = "/api/speedtest/data", .method = HTTP_GET, .handler = speedtest_data_handler },
+        { .uri = "/api/speedtest/sink", .method = HTTP_POST, .handler = speedtest_sink_handler },
     };
     for (size_t i = 0; i < sizeof(routes) / sizeof(routes[0]); i++)
     {

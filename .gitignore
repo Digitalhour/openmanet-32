@@ -12,3 +12,6 @@ sdkconfig.local
 # Editors and OS
 .vscode/
 .DS_Store
+
+# Python bytecode (tools/preview.py)
+__pycache__/

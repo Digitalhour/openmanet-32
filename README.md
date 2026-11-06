@@ -91,6 +91,10 @@ and a back arrow. From the menu you can change the mesh, HaLow radio and hotspot
 board restarts) or the root password (no restart; everyone is signed out). Changes are only accepted from the
 board's own hotspot. Over the mesh, root can sign in and look but not change anything.
 
+**Speed test** (in the ☰ menu) measures the HaLow link: the meshpoint downloads a file from
+another node's web page for a few seconds and times it. Nothing needs installing on the node.
+It also times downloads and uploads between your phone or laptop and the meshpoint.
+
 Hotspot clients reach the mesh through NAT. The board offers no DNS, since an OpenMANET mesh
 has none of its own, so use addresses.
 
