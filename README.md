@@ -86,8 +86,9 @@ to see:
 - its mesh address and HaLow channel;
 - the hotspot clients.
 
-From the same page you can change the mesh, HaLow radio and hotspot settings (the board
-restarts) or the root password (no restart; everyone is signed out). Changes are only accepted from the
+The page works like a phone app: a ☰ menu, a Status screen whose cards open their own pages,
+and a back arrow. From the menu you can change the mesh, HaLow radio and hotspot settings (the
+board restarts) or the root password (no restart; everyone is signed out). Changes are only accepted from the
 board's own hotspot. Over the mesh, root can sign in and look but not change anything.
 
 Hotspot clients reach the mesh through NAT. The board offers no DNS, since an OpenMANET mesh
@@ -105,7 +106,7 @@ Sign-in details:
 
 ## Radio settings
 
-The dashboard's **HaLow radio** section (and the **Radio settings** box in the setup
+The dashboard's **HaLow radio** screen (and the **Radio settings** box in the setup
 wizard) offers the same choices as the HaLow radio settings on an OpenMANET node, from the
 same channel table (Morse Micro's, which OpenMANET ships as
 `/usr/share/morse-regdb/channels.csv`):
@@ -119,7 +120,7 @@ same channel table (Morse Micro's, which OpenMANET ships as
 - **Beacon interval**: OpenMANET's mesh default is 1000 TU.
 - **Transmit power**: driver default (the regulatory maximum) or a cap from 1 to 30 dBm.
 
-The hotspot section also picks the 2.4 GHz hotspot channel. Saving restarts the board.
+The **Hotspot** screen also picks the 2.4 GHz hotspot channel. Saving restarts the board.
 Every node in a mesh must use the same channel and primary settings. If you pick a wrong
 one, the board drops off the mesh but its hotspot still works, so you can fix it from the
 page (or hold BOOT for 5 seconds to start over).
@@ -161,6 +162,10 @@ things the standards don't tell you. They are all documented in the comments of
   batman-adv implementation.
 - [docs/openmanet-test-mesh.sh](docs/openmanet-test-mesh.sh) and its undo script: move an
   OpenMANET node to an open test mesh, to tell radio problems from encryption problems.
+- [tools/preview.py](tools/preview.py): runs the dashboard and setup pages on a computer with
+  made-up mesh data, so you can work on the design without flashing a board.
+  `python3 tools/preview.py`, then open `http://localhost:8765/` (`/setup` for the setup
+  page, `?login` for the sign-in screens). Edits show on the next reload.
 
 ## Status and known gaps
 

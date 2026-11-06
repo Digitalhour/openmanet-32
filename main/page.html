@@ -2,203 +2,428 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#080a0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>OpenMANET-32</title>
 <style>
   /* Colors from openmanet.net, so the meshpoint looks like the rest of OpenMANET. */
   :root {
-    --bg: #080a0a; --card: #0d0f12; --text: #e7ebf2; --muted: #9aa7b3;
+    --bg: #080a0a; --card: #0d0f12; --card-hi: #14181d; --text: #e7ebf2; --muted: #9aa7b3;
     --line: rgba(255, 255, 255, .08); --field: #080a0a;
     --accent: #556b2f; --accent-text: #a4c069; --on-accent: #f3f3f3;
     --ok: #a4c069; --warn: #d29922; --bad: #f85149;
+    --bar-h: 64px;
     color-scheme: dark;
   }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans", sans-serif; }
-  main { max-width: 560px; margin: 0 auto; padding: 16px; }
-  h1 { font-size: 22px; margin: 4px 0 2px; }
-  .sub { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
-  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-            padding: 14px 16px; margin-bottom: 14px; }
-  h2 { font-size: 16px; margin: 0 0 10px; }
-  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; }
-  dt { color: var(--muted); }
-  dd { margin: 0; overflow-wrap: anywhere; }
-  ul { list-style: none; padding: 0; margin: 8px 0 0; }
-  li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0;
-       border-top: 1px solid var(--line); font-size: 14px; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans", sans-serif; }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .pill { font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
   .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
-  label { display: block; font-size: 14px; color: var(--muted); margin: 10px 0 4px; }
-  .row { display: flex; gap: 8px; }
-  input[type=text], input[type=password] {
-    width: 100%; padding: 10px 12px; font-size: 16px; color: var(--text); background: var(--field);
-    border: 1px solid var(--line); border-radius: 8px; }
-  input:focus { outline: 2px solid var(--accent-text); outline-offset: -1px; }
-  input[type=checkbox] { accent-color: var(--accent); }
-  .check { display: flex; align-items: center; gap: 8px; color: var(--text); margin-top: 10px; }
-  .hint { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
-  button { font-size: 16px; padding: 10px 14px; border-radius: 999px; border: 1px solid var(--line);
-           background: var(--card); color: var(--text); cursor: pointer; font-family: inherit; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); width: 100%;
-                   margin-top: 4px; font-weight: 600; box-shadow: 0 6px 20px rgba(85, 107, 47, .35); }
-  button.link { border: 0; background: none; color: var(--accent-text); padding: 0 4px; font-size: 14px; }
-  button:disabled { opacity: .5; cursor: default; }
-  #msg, #l_msg, #p_msg { min-height: 1.4em; margin: 10px 0 0; font-size: 14px; }
-  .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-  select, input[type=number] {
-    width: 100%; padding: 10px 12px; font-size: 16px; color: var(--text); background: var(--field);
-    border: 1px solid var(--line); border-radius: 8px; font-family: inherit; }
-  select:focus, input[type=number]:focus { outline: 2px solid var(--accent-text); outline-offset: -1px; }
+  .hint { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+
+  /* Form controls */
+  label { display: block; font-size: 14px; color: var(--muted); margin: 12px 0 6px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  input[type=text], input[type=password], input[type=number], select {
+    width: 100%; padding: 12px 14px; font-size: 16px; color: var(--text); background: var(--field);
+    border: 1px solid var(--line); border-radius: 12px; font-family: inherit; }
+  input:focus, select:focus { outline: 2px solid var(--accent-text); outline-offset: -1px; }
+  input[type=checkbox] { accent-color: var(--accent); width: 20px; height: 20px; }
+  .check { display: flex; align-items: center; gap: 10px; color: var(--text); margin-top: 14px; font-size: 15px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
-  .hero { display: block; width: 160px; height: 160px; margin: 8px auto 4px; }
-  #login h1, #login > .sub { text-align: center; }
-  .notice { font-size: 14px; color: var(--warn); margin: 0 0 14px; }
-  .actions { display: flex; justify-content: center; margin-top: 4px; }
+  button { font: inherit; cursor: pointer; }
+  button.primary { display: block; width: 100%; margin-top: 18px; padding: 14px; border: 0; border-radius: 999px;
+                   background: var(--accent); color: var(--on-accent); font-weight: 600;
+                   box-shadow: 0 6px 20px rgba(85, 107, 47, .35); }
+  button.danger { display: block; width: 100%; margin-top: 18px; padding: 14px; border-radius: 999px;
+                  border: 1px solid rgba(248, 81, 73, .5); background: none; color: var(--bad); font-weight: 600; }
+  button.link { border: 0; background: none; color: var(--accent-text); padding: 4px; font-size: 14px; }
+  button:disabled { opacity: .5; cursor: default; }
+
+  /* Sign-in screen */
+  #login { max-width: 420px; margin: 0 auto; padding: 24px 20px calc(24px + env(safe-area-inset-bottom)); }
+  #login .hero { display: block; width: 160px; height: 160px; margin: 24px auto 8px; }
+  #login h1 { text-align: center; font-size: 24px; margin: 0; }
+  #login .sub { text-align: center; color: var(--muted); font-size: 14px; margin: 4px 0 20px; }
+  #login .panel { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 4px 16px 16px; }
+  #l_msg { min-height: 1.4em; margin: 12px 0 0; font-size: 14px; text-align: center; }
+
+  /* The app: a phone-width column with a top bar and a bottom tab bar. */
+  #app { max-width: 480px; margin: 0 auto; min-height: 100vh; min-height: 100dvh; position: relative; }
+  .appbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 8px;
+            padding: calc(10px + env(safe-area-inset-top)) 16px 10px; min-height: 56px;
+            background: rgba(8, 10, 10, .85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--line); }
+  .burger { border: 0; background: none; color: var(--text); padding: 8px; margin-left: -8px; display: grid; place-items: center;
+            border-radius: 10px; }
+  .burger:active { background: var(--card-hi); }
+  .burger svg { width: 24px; height: 24px; }
+  .burger .i-back { display: none; }
+  .appbar.sub .burger .i-menu { display: none; }
+  .appbar.sub .burger .i-back { display: block; color: var(--accent-text); }
+  .appbar h1 { flex: 1; margin: 0; font-size: 17px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .appbar .state { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+
+  .view { display: none; padding: 16px 16px calc(40px + env(safe-area-inset-bottom)); }
+  .view.on { display: block; animation: in .18s ease-out; }
+  @keyframes in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .view h2 { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600;
+             margin: 22px 4px 8px; }
+  .view h2:first-child { margin-top: 4px; }
+  .device-info h2:first-child { margin-top: 22px; }
+  .view > .device-info:first-child h2:first-child { margin-top: 4px; }
+  .notice { font-size: 14px; color: var(--warn); background: rgba(210, 153, 34, .08); border: 1px solid rgba(210, 153, 34, .3);
+            border-radius: 12px; padding: 10px 12px; margin: 0 0 12px; }
+
+  /* Status screen */
+  .hero-card { background: radial-gradient(120% 140% at 0% 0%, rgba(85, 107, 47, .35), transparent 60%), var(--card);
+               border: 1px solid var(--line); border-radius: 20px; padding: 18px; display: flex; gap: 14px; align-items: center;
+               position: relative; color: inherit; text-decoration: none; transition: transform .1s; }
+  .hero-card img { width: 72px; height: 72px; flex: none; }
+  .hero-card .big { font-size: 22px; font-weight: 700; line-height: 1.2; }
+  .hero-card .small { color: var(--muted); font-size: 14px; margin-top: 4px; overflow-wrap: anywhere; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; min-width: 0;
+          display: block; position: relative; color: inherit; text-decoration: none; transition: background .15s, transform .1s; }
+  a.tile::after, a.hero-card::after { content: ""; position: absolute; top: 16px; right: 14px; width: 6px; height: 6px;
+          border-right: 2px solid var(--muted); border-top: 2px solid var(--muted); transform: rotate(45deg); opacity: .6; }
+  a.tile:active, a.hero-card:active { background: var(--card-hi); transform: scale(.98); }
+  @media (hover: hover) { a.tile:hover, a.hero-card:hover { background: var(--card-hi); } }
+  .tile .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .tile .v { font-size: 18px; font-weight: 600; margin-top: 4px; overflow-wrap: anywhere; line-height: 1.25; }
+  .tile .s { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .tile .v.mono { font-size: 15px; font-weight: 500; overflow-wrap: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Grouped lists, like a phone's settings app */
+  .list { background: var(--card); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  .cell { display: flex; align-items: center; gap: 12px; min-height: 54px; padding: 10px 16px; color: var(--text);
+          text-decoration: none; border-top: 1px solid var(--line); width: 100%; background: none; border-left: 0;
+          border-right: 0; border-bottom: 0; text-align: left; font-size: 16px; }
+  .cell:first-child { border-top: 0; }
+  a.cell:active, button.cell:active { background: var(--card-hi); }
+  .cell .ic { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; flex: none;
+              background: rgba(85, 107, 47, .25); color: var(--accent-text); }
+  .cell .ic svg { width: 18px; height: 18px; }
+  .cell .t { flex: 1; min-width: 0; }
+  .cell .t small { display: block; color: var(--muted); font-size: 13px; }
+  .cell .v { color: var(--muted); font-size: 14px; text-align: right; max-width: 50%; overflow: hidden;
+             text-overflow: ellipsis; white-space: nowrap; }
+  a.cell::after { content: ""; width: 7px; height: 7px; border-right: 2px solid var(--muted); border-top: 2px solid var(--muted);
+                  transform: rotate(45deg); flex: none; margin-left: 2px; opacity: .7; }
+  .cell.red { color: var(--bad); }
+  .cell.red .ic { background: rgba(248, 81, 73, .15); color: var(--bad); }
+  .form-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 4px 16px 16px; }
+  .kv { display: flex; justify-content: space-between; gap: 16px; padding: 13px 16px; border-top: 1px solid var(--line); }
+  .kv:first-child { border-top: 0; }
+  .kv span { color: var(--muted); }
+  .kv b { font-weight: 500; text-align: right; overflow-wrap: anywhere; }
+  a.kv { color: inherit; text-decoration: none; }
+  a.kv b::after { content: " \203A"; color: var(--muted); }
+
+  /* Nodes screen */
+  .node { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 10px 16px; border-top: 1px solid var(--line); }
+  .node:first-child { border-top: 0; }
+  .node .t { flex: 1; min-width: 0; }
+  .node .mac { font-size: 14px; overflow: hidden; text-overflow: ellipsis; }
+  .node small { display: block; color: var(--muted); font-size: 13px; }
+  .bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 18px; flex: none; }
+  .bars i { width: 4px; border-radius: 1px; background: rgba(255, 255, 255, .12); }
+  .bars i:nth-child(1) { height: 25%; } .bars i:nth-child(2) { height: 50%; }
+  .bars i:nth-child(3) { height: 75%; } .bars i:nth-child(4) { height: 100%; }
+  .bars i.on { background: var(--accent-text); }
+  .bars.weak i.on { background: var(--warn); }
+  .pill { font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+  .empty { padding: 28px 16px; text-align: center; color: var(--muted); }
+
+  /* Side menu (hamburger) */
+  .scrim { position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, .55); opacity: 0; pointer-events: none;
+           transition: opacity .2s; }
+  .scrim.show { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; top: 0; bottom: 0; z-index: 31; left: max(0px, calc((100vw - 480px) / 2));
+            width: min(300px, 84vw); background: var(--card); border-right: 1px solid var(--line);
+            transform: translateX(-105%); transition: transform .22s ease-out; overflow-y: auto;
+            padding: calc(16px + env(safe-area-inset-top)) 12px calc(16px + env(safe-area-inset-bottom));
+            box-shadow: 20px 0 40px rgba(0, 0, 0, .5); }
+  @media (min-width: 481px) { .drawer { transform: translateX(-100vw); } }
+  .drawer.open { transform: none; }
+  .drawer .who { display: flex; align-items: center; gap: 12px; padding: 4px 8px 16px; border-bottom: 1px solid var(--line);
+                 margin-bottom: 8px; }
+  .drawer .who img { width: 48px; height: 48px; flex: none; }
+  .drawer .who b { display: block; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .drawer .who span { font-size: 13px; }
+  .drawer h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 16px 10px 6px; }
+  .mi { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px; border-radius: 12px; color: var(--text);
+        text-decoration: none; background: none; border: 0; text-align: left; font-size: 15px; }
+  .mi:active { background: var(--card-hi); }
+  .mi.on { background: rgba(85, 107, 47, .25); color: var(--accent-text); }
+  .mi svg { width: 20px; height: 20px; flex: none; }
+  .mi .t { flex: 1; min-width: 0; }
+  .mi small { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mi.red { color: var(--bad); }
+
+  /* Toast */
+  .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 40;
+           transform: translate(-50%, 20px); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+           max-width: min(440px, calc(100vw - 32px)); width: max-content; padding: 12px 16px; border-radius: 14px;
+           background: #1a1f25; border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(0, 0, 0, .5); font-size: 14px; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
 </style>
 </head>
 <body>
-<main>
-  <form id="login" hidden novalidate>
-    <img class="hero" src="/board.webp" alt="" width="160" height="160">
-    <h1>OpenMANET-32</h1>
-    <p class="sub">Sign in as root with the password chosen at setup.</p>
-    <section>
-      <label for="l_user">User name</label>
-      <input type="text" id="l_user" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false">
-      <label for="l_pass">Password</label>
-      <div class="row">
-        <input type="password" id="l_pass" autocomplete="current-password" autocapitalize="off" autocorrect="off">
-        <button type="button" class="link" data-show="l_pass">Show</button>
-      </div>
-    </section>
-    <button type="submit" class="primary" id="l_go">Sign in</button>
-    <p id="l_msg" role="alert"></p>
-    <p class="hint">Forgot it? Hold the meshpoint's BOOT button for 5 seconds to erase all settings
-      and set it up again.</p>
-  </form>
 
-  <div id="app" hidden>
-  <div class="top">
-    <h1 id="title">Meshpoint</h1>
-    <button type="button" class="link" id="logout">Sign out</button>
+<form id="login" hidden novalidate>
+  <img class="hero" src="/board.webp" alt="" width="160" height="160">
+  <h1>OpenMANET-32</h1>
+  <p class="sub">Sign in as root with the password chosen at setup.</p>
+  <div class="panel">
+    <label for="l_user">User name</label>
+    <input type="text" id="l_user" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <label for="l_pass">Password</label>
+    <div class="row">
+      <input type="password" id="l_pass" autocomplete="current-password" autocapitalize="off" autocorrect="off">
+      <button type="button" class="link" data-show="l_pass">Show</button>
+    </div>
   </div>
-  <p class="sub" id="sub">Loading&hellip;</p>
+  <button type="submit" class="primary" id="l_go">Sign in</button>
+  <p id="l_msg" role="alert"></p>
+  <p class="hint" style="text-align:center">Forgot it? Hold the meshpoint's BOOT button for 5 seconds to
+    erase all settings and set it up again.</p>
+</form>
 
-  <section>
+<div id="app" hidden>
+  <header class="appbar" id="bar">
+    <button type="button" class="burger" id="burger" aria-label="Menu" aria-controls="drawer" aria-expanded="false">
+      <svg class="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      <svg class="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <h1 id="title">Meshpoint</h1>
+    <span class="state" id="state"><span class="dot"></span><span id="state-t">&hellip;</span></span>
+  </header>
+
+  <!-- Status -->
+  <section class="view" data-view="status" data-title="">
+    <p class="notice" id="ro" hidden>You are viewing this page over the mesh. Settings can only be
+      changed by someone joined to this meshpoint's own hotspot.</p>
+    <a class="hero-card" href="#nodes">
+      <img src="/board.webp" alt="" width="72" height="72">
+      <div>
+        <div class="big" id="s-big">&ndash;</div>
+        <div class="small" id="sub">Loading&hellip;</div>
+      </div>
+    </a>
+    <div class="tiles">
+      <a class="tile" href="#mesh"><div class="k">Mesh</div><div class="v" id="s-mesh">&ndash;</div><div class="s" id="s-sec">&ndash;</div></a>
+      <a class="tile" href="#radio"><div class="k">HaLow</div><div class="v" id="s-chan">&ndash;</div><div class="s" id="s-chan2">&ndash;</div></a>
+      <a class="tile" href="#device"><div class="k">Mesh address</div><div class="v mono" id="s-ip">&ndash;</div><div class="s">bat0</div></a>
+      <a class="tile" href="#nodes"><div class="k">Nodes</div><div class="v" id="s-linked">&ndash;</div><div class="s" id="s-reach">&ndash;</div></a>
+      <a class="tile" href="#hotspot"><div class="k">Hotspot</div><div class="v" id="s-clients">&ndash;</div><div class="s" id="s-ap">&ndash;</div></a>
+      <a class="tile" href="#device"><div class="k">Up for</div><div class="v" id="s-up">&ndash;</div><div class="s">since restart</div></a>
+    </div>
+    <div class="device-info"></div>
+  </section>
+
+  <!-- Device details: one copy on its own page, one under the Status tiles -->
+  <template id="device-info">
+    <h2>This meshpoint</h2>
+    <div class="list">
+      <div class="kv"><span>Firmware</span><b>OpenMANET-32</b></div>
+      <div class="kv"><span>State</span><b data-d="linked">&ndash;</b></div>
+    </div>
     <h2>Mesh</h2>
-    <dl>
-      <dt>Network</dt><dd id="s-mesh">&ndash;</dd>
-      <dt>Security</dt><dd id="s-sec">&ndash;</dd>
-      <dt>Mesh address</dt><dd id="s-ip" class="mono">&ndash;</dd>
-      <dt>Hotspot clients</dt><dd id="s-clients">&ndash;</dd>
-      <dt>HaLow channel</dt><dd id="s-chan">&ndash;</dd>
-      <dt>Up for</dt><dd id="s-up">&ndash;</dd>
-    </dl>
-    <ul id="peers"></ul>
+    <div class="list">
+      <a class="kv" href="#mesh"><span>Network</span><b data-d="mesh">&ndash;</b></a>
+      <div class="kv"><span>Security</span><b data-d="sec">&ndash;</b></div>
+      <div class="kv"><span>Mesh address (bat0)</span><b class="mono" data-d="ip">&ndash;</b></div>
+      <a class="kv" href="#radio"><span>HaLow channel</span><b data-d="chan">&ndash;</b></a>
+      <div class="kv"><span>Primary channel</span><b data-d="prim">&ndash;</b></div>
+    </div>
+    <h2>Hotspot</h2>
+    <div class="list">
+      <a class="kv" href="#hotspot"><span>Name</span><b data-d="ssid">&ndash;</b></a>
+      <div class="kv"><span>Address</span><b class="mono" data-d="apip">&ndash;</b></div>
+      <div class="kv"><span>Wi-Fi channel</span><b data-d="apch">&ndash;</b></div>
+      <div class="kv"><span>Clients</span><b data-d="clients">&ndash;</b></div>
+    </div>
+  </template>
+  <section class="view" data-view="device" data-title="Device">
+    <div class="device-info"></div>
+  </section>
+
+  <!-- Nodes -->
+  <section class="view" data-view="nodes" data-title="Nodes">
+    <h2>Nearby nodes</h2>
+    <div class="list" id="peers"></div>
     <p class="hint" id="nodes"></p>
   </section>
 
-  <p class="notice" id="ro" hidden>You are viewing this page over the mesh. Settings can only be
-    changed by someone joined to this meshpoint's own hotspot.</p>
-
   <form id="f" autocomplete="off">
-    <section>
-      <h2>OpenMANET network to join</h2>
-      <label for="mesh_id">Network name (mesh ID)</label>
-      <input type="text" id="mesh_id" maxlength="32" required autocapitalize="off" spellcheck="false">
-      <label for="mesh_password">Password</label>
-      <div class="row">
-        <input type="password" id="mesh_password" maxlength="63" placeholder="Leave blank to keep the current one">
-        <button type="button" class="link" data-show="mesh_password">Show</button>
+    <section class="view" data-view="mesh" data-title="OpenMANET network">
+      <div class="form-card">
+        <label for="mesh_id">Network name (mesh ID)</label>
+        <input type="text" id="mesh_id" maxlength="32" required autocapitalize="off" spellcheck="false">
+        <label for="mesh_password">Password</label>
+        <div class="row">
+          <input type="password" id="mesh_password" maxlength="63" placeholder="Leave blank to keep the current one">
+          <button type="button" class="link" data-show="mesh_password">Show</button>
+        </div>
+        <label class="check"><input type="checkbox" id="mesh_open"> Open network (no password)</label>
       </div>
-      <label class="check"><input type="checkbox" id="mesh_open"> Open network (no password)</label>
       <p class="hint">Must match the mesh name and password on your OpenMANET nodes.</p>
+      <button type="submit" class="primary">Save and restart</button>
     </section>
 
-    <section>
-      <h2>HaLow radio</h2>
-      <div class="grid2">
-        <div>
-          <label for="r_width">Width</label>
-          <select id="r_width"></select>
+    <section class="view" data-view="radio" data-title="HaLow radio">
+      <div class="form-card">
+        <div class="grid2">
+          <div><label for="r_width">Width</label><select id="r_width"></select></div>
+          <div><label for="r_chan">Channel</label><select id="r_chan"></select></div>
+          <div><label for="r_pbw">Primary width</label><select id="r_pbw"></select></div>
+          <div><label for="r_pidx">Primary index</label><select id="r_pidx"></select></div>
         </div>
-        <div>
-          <label for="r_chan">Channel</label>
-          <select id="r_chan"></select>
-        </div>
-        <div>
-          <label for="r_pbw">Primary width</label>
-          <select id="r_pbw"></select>
-        </div>
-        <div>
-          <label for="r_pidx">Primary index</label>
-          <select id="r_pidx"></select>
-        </div>
-      </div>
-      <p class="hint" id="r_info"></p>
-      <div class="grid2">
-        <div>
-          <label for="r_beacon">Beacon interval (TU)</label>
-          <input type="number" id="r_beacon" min="15" max="10000" step="1">
-        </div>
-        <div>
-          <label for="r_tx">Transmit power</label>
-          <select id="r_tx"></select>
+        <p class="hint" id="r_info"></p>
+        <div class="grid2">
+          <div><label for="r_beacon">Beacon (TU)</label><input type="number" id="r_beacon" min="15" max="10000" step="1" inputmode="numeric"></div>
+          <div><label for="r_tx">Transmit power</label><select id="r_tx"></select></div>
         </div>
       </div>
       <p class="hint">Same choices as the HaLow radio on your OpenMANET nodes (in LuCI: Network,
         Wireless, the HaLow radio's channel settings). Every node must use the same channel and
         primary settings. OpenMANET's beacon interval for a mesh is 1000. On USB power keep the
         transmit power at 8 dBm or lower.</p>
+      <button type="submit" class="primary">Save and restart</button>
     </section>
 
-    <section>
-      <h2>This meshpoint's hotspot</h2>
-      <label for="ap_ssid">Hotspot name</label>
-      <input type="text" id="ap_ssid" maxlength="32" required autocapitalize="off" spellcheck="false">
-      <label for="ap_password">Hotspot password</label>
-      <div class="row">
-        <input type="password" id="ap_password" maxlength="63" placeholder="Leave blank to keep the current one">
-        <button type="button" class="link" data-show="ap_password">Show</button>
+    <section class="view" data-view="hotspot" data-title="Hotspot">
+      <div class="form-card">
+        <label for="ap_ssid">Hotspot name</label>
+        <input type="text" id="ap_ssid" maxlength="32" required autocapitalize="off" spellcheck="false">
+        <label for="ap_password">Hotspot password</label>
+        <div class="row">
+          <input type="password" id="ap_password" maxlength="63" placeholder="Leave blank to keep the current one">
+          <button type="button" class="link" data-show="ap_password">Show</button>
+        </div>
+        <label for="r_ap">Channel (2.4 GHz)</label>
+        <select id="r_ap"></select>
       </div>
-      <p class="hint">8 to 63 characters. If you change the hotspot name or password, rejoin with the new ones after the restart.</p>
-      <label for="r_ap">Hotspot channel (2.4 GHz)</label>
-      <select id="r_ap"></select>
+      <p class="hint">Password: 8 to 63 characters. If you change the hotspot name or password, rejoin
+        with the new ones after the restart.</p>
+      <button type="submit" class="primary" id="save">Save and restart</button>
     </section>
-
-    <button type="submit" class="primary" id="save">Save and restart</button>
-    <p id="msg"></p>
   </form>
 
   <form id="pf" autocomplete="off" novalidate>
-    <section>
-      <h2>Root password</h2>
-      <label for="p_cur">Current password</label>
-      <input type="password" id="p_cur" maxlength="63" autocomplete="current-password">
-      <label for="p_new">New password (8 or more characters)</label>
-      <div class="row">
-        <input type="password" id="p_new" maxlength="63" autocomplete="new-password">
-        <button type="button" class="link" data-show="p_new">Show</button>
+    <section class="view" data-view="root" data-title="Root password">
+      <div class="form-card">
+        <label for="p_cur">Current password</label>
+        <input type="password" id="p_cur" maxlength="63" autocomplete="current-password">
+        <label for="p_new">New password (8 or more characters)</label>
+        <div class="row">
+          <input type="password" id="p_new" maxlength="63" autocomplete="new-password">
+          <button type="button" class="link" data-show="p_new">Show</button>
+        </div>
+        <label for="p_new2">New password again</label>
+        <input type="password" id="p_new2" maxlength="63" autocomplete="new-password">
       </div>
-      <label for="p_new2">New password again</label>
-      <input type="password" id="p_new2" maxlength="63" autocomplete="new-password">
-      <p class="hint">Takes effect at once, no restart. You sign in again with the new one.</p>
+      <p class="hint">Takes effect at once, no restart. Everyone signs in again with the new one.</p>
+      <button type="submit" class="primary" id="p_go">Change root password</button>
     </section>
-    <button type="submit" class="primary" id="p_go">Change root password</button>
-    <p id="p_msg"></p>
   </form>
 
-  <div class="actions"><button type="button" class="link" id="reset">Erase settings and set up again</button></div>
-  </div>
-</main>
+  <section class="view" data-view="reset" data-title="Start over">
+    <div class="form-card">
+      <p>Erases the mesh, radio, hotspot and root password settings. The meshpoint leaves the mesh
+        and restarts with an open setup hotspot, as when it was first flashed.</p>
+      <p class="hint">You can also do this with the BOOT button: hold it for 5 seconds.</p>
+    </div>
+    <button type="button" class="danger" id="reset">Erase settings and set up again</button>
+  </section>
+
+  <div class="scrim" id="scrim"></div>
+  <nav class="drawer" id="drawer" aria-label="Menu">
+    <div class="who">
+      <img src="/board.webp" alt="" width="48" height="48">
+      <div style="min-width:0"><b id="d-name">Meshpoint</b><span class="state" id="d-state"><span class="dot"></span><span id="d-state-t">&hellip;</span></span></div>
+    </div>
+    <a class="mi" href="#status" data-go="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span class="t">Status</span></a>
+    <a class="mi" href="#nodes" data-go="nodes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M11 7l-5 10M13 7l5 10M7 19h10"/></svg><span class="t">Nodes<small id="sum-nodes"></small></span></a>
+    <h3>Settings</h3>
+    <a class="mi" href="#mesh" data-go="mesh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="M7 11l10-4M7 13l10 4"/></svg><span class="t">OpenMANET network<small id="sum-mesh"></small></span></a>
+    <a class="mi" href="#radio" data-go="radio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-8"/><circle cx="12" cy="10" r="2"/><path d="M8 6a6 6 0 0 0 0 8M16 6a6 6 0 0 1 0 8M5 3a10 10 0 0 0 0 14M19 3a10 10 0 0 1 0 14"/></svg><span class="t">HaLow radio<small id="sum-radio"></small></span></a>
+    <a class="mi" href="#hotspot" data-go="hotspot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1"/></svg><span class="t">Hotspot<small id="sum-ap"></small></span></a>
+    <a class="mi" href="#root" data-go="root"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="t">Root password<small>user root</small></span></a>
+    <h3>Device</h3>
+    <a class="mi" href="#device" data-go="device"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M10 7h4M10 11h4M11 17h2"/></svg><span class="t">Device details<small>Addresses, channels, uptime</small></span></a>
+    <a class="mi red" href="#reset" data-go="reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg><span class="t">Start over<small>Erase all settings</small></span></a>
+    <button type="button" class="mi" id="logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4"/></svg><span class="t">Sign out</span></button>
+  </nav>
+
+  <div class="toast" id="msg" role="status" aria-live="polite"></div>
+</div>
 
 <script src="/radio.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
-let filled = false, canEdit = false, busy = false;
+let filled = false, canEdit = false, busy = false, apTitle = "Meshpoint";
+
+/* ---------- Screens (#status, #nodes, #mesh, #radio, #hotspot, #root, #reset) and the menu ---------- */
+
+function menu(open) {
+  $("drawer").classList.toggle("open", open);
+  $("scrim").classList.toggle("show", open);
+  $("burger").setAttribute("aria-expanded", open ? "true" : "false");
+}
+/* Cards and detail rows open a page "inside" the current one: the top bar then shows a back
+ * arrow instead of the menu. Pages opened from the menu start fresh. */
+let trail = [];
+const current = () => location.hash.slice(1) || "status";
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a[href^='#']");
+  if (!a) return;
+  if (a.closest(".drawer")) trail = [];
+  else if (a.getAttribute("href").slice(1) !== current()) trail.push(current());
+});
+$("burger").addEventListener("click", () => {
+  if (trail.length) { location.hash = "#" + trail[trail.length - 1]; return; }
+  menu(!$("drawer").classList.contains("open"));
+});
+$("scrim").addEventListener("click", () => menu(false));
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") menu(false); });
+
+function route() {
+  let name = location.hash.slice(1) || "status";
+  if (!document.querySelector('.view[data-view="' + name + '"]')) name = "status";
+  let view;
+  for (const v of document.querySelectorAll(".view")) {
+    v.classList.toggle("on", v.dataset.view === name);
+    if (v.dataset.view === name) view = v;
+  }
+  if (trail.length && trail[trail.length - 1] === name) trail.pop();   /* went back */
+  if (name === "status") trail = [];
+  $("bar").classList.toggle("sub", trail.length > 0);
+  $("burger").setAttribute("aria-label", trail.length ? "Back" : "Menu");
+  for (const m of document.querySelectorAll(".mi[data-go]")) m.classList.toggle("on", m.dataset.go === name);
+  $("title").textContent = view.dataset.title || apTitle;
+  menu(false);
+  window.scrollTo(0, 0);
+}
+window.addEventListener("hashchange", route);
+
+/* ---------- Messages ---------- */
+
+let toastTimer;
+function say(text, cls, sticky) {
+  const m = $("msg");
+  clearTimeout(toastTimer);
+  if (!text) { m.classList.remove("show"); return; }
+  m.textContent = text;
+  m.className = "toast show " + (cls || "");
+  if (!sticky) toastTimer = setTimeout(() => m.classList.remove("show"), 4500);
+}
+const psay = say;
 
 function applyLock() {
   for (const el of document.querySelectorAll("#f input, #f select, #f button, #pf input, #pf button, #reset")) el.disabled = !canEdit || busy;
@@ -214,12 +439,25 @@ function showLogin(text, cls) {
   $("l_user").focus();
 }
 
+for (const box of document.querySelectorAll(".device-info")) box.appendChild($("device-info").content.cloneNode(true));
+function setD(key, text) { for (const el of document.querySelectorAll('[data-d="' + key + '"]')) el.textContent = text; }
+
 function upFor(s) {
   const d = Math.floor(s / 86400), h = Math.floor(s / 3600) % 24, m = Math.floor(s / 60) % 60;
   return (d ? d + "d " : "") + (d || h ? h + "h " : "") + m + "m";
 }
 
-function say(text, cls) { const m = $("msg"); m.textContent = text; m.className = cls || ""; }
+const mhz = (f) => Math.round(f * 1000) / 1000;
+
+function bars(rssi) {
+  const n = rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -75 ? 2 : 1;
+  const b = document.createElement("span");
+  b.className = "bars" + (n <= 1 ? " weak" : "");
+  for (let i = 1; i <= 4; i++) { const x = document.createElement("i"); if (i <= n) x.className = "on"; b.appendChild(x); }
+  return b;
+}
+
+/* ---------- Live status ---------- */
 
 async function refresh() {
   if (!$("login").hidden || busy) return;
@@ -228,42 +466,84 @@ async function refresh() {
     r = await fetch("/api/status", { cache: "no-store" });
     if (r.status === 401) { showLogin($("app").hidden ? "" : "Signed out. Sign in again."); return; }
     st = await r.json();
-  } catch (e) { $("sub").textContent = "Not reachable. Is this device still on the hotspot?"; return; }
+  } catch (e) {
+    $("state-t").textContent = $("d-state-t").textContent = "Offline";
+    $("state").className = $("d-state").className = "state bad";
+    return;
+  }
+  const first = $("app").hidden;
   $("app").hidden = false;
+  if (first) route();
 
   canEdit = st.can_edit;
-  $("title").textContent = st.ap_ssid;
-  $("sub").textContent = "Meshpoint settings";
-  $("s-mesh").textContent = st.mesh_id;
-  $("s-sec").innerHTML = st.mesh_secure ? '<span class="pill ok">Encrypted</span>' : '<span class="pill warn">Open</span>';
-  $("s-ip").textContent = st.mesh_ip || "–";
-  $("s-clients").textContent = st.ap_clients;
-  $("s-up").textContent = upFor(st.uptime_s);
-  if (st.radio) {
-    $("s-chan").textContent = st.radio.chan + " (" + (Math.round(st.radio.mhz * 1000) / 1000) + " MHz), " + st.radio.bw +
-      " MHz wide; primary " + st.radio.prim_bw + " MHz at index " + st.radio.prim_idx;
-  }
+  apTitle = st.ap_ssid;
+  if (!location.hash || location.hash === "#status") $("title").textContent = apTitle;
+  $("d-name").textContent = apTitle;
 
   const peered = st.peers.filter((p) => p.peered).length;
-  const ul = $("peers");
-  ul.textContent = "";
+  const linked = peered > 0;
+  $("state-t").textContent = $("d-state-t").textContent = linked ? "Linked" : st.peers.length ? "Joining" : "Searching";
+  $("state").className = $("d-state").className = "state " + (linked ? "ok" : "warn");
+  $("d-name").textContent = st.ap_ssid;
+  $("sum-nodes").textContent = peered + " linked of " + st.peers.length + " heard";
+  $("s-big").textContent = linked ? "Linked to " + peered + (peered === 1 ? " node" : " nodes")
+                                  : st.peers.length ? "Joining the mesh" : "Looking for nodes";
+  $("sub").textContent = (st.mesh_id || "No mesh") + " · " + (st.mesh_secure ? "encrypted" : "open");
+
+  $("s-mesh").textContent = st.mesh_id || "–";
+  $("s-sec").innerHTML = st.mesh_secure ? '<span class="ok">Encrypted</span>' : '<span class="warn">Open</span>';
+  $("s-ip").textContent = st.mesh_ip || "–";
+  $("s-linked").textContent = peered + " linked";
+  $("s-reach").textContent = st.nodes.length + " reachable";
+  $("s-clients").textContent = st.ap_clients + (st.ap_clients === 1 ? " client" : " clients");
+  $("s-up").textContent = upFor(st.uptime_s);
+  if (st.radio) {
+    $("s-chan").textContent = "Ch " + st.radio.chan;
+    $("s-chan2").textContent = mhz(st.radio.mhz) + " MHz · " + st.radio.bw + " MHz wide";
+    $("s-ap").textContent = "Wi-Fi ch " + st.radio.ap_chan;
+    $("sum-radio").textContent = "Ch " + st.radio.chan + " · " + mhz(st.radio.mhz) + " MHz";
+    $("sum-ap").textContent = st.ap_ssid + " · ch " + st.radio.ap_chan;
+  }
+  $("sum-mesh").textContent = st.mesh_id || "";
+
+  setD("linked", $("s-big").textContent);
+  setD("mesh", st.mesh_id || "\u2013");
+  setD("sec", st.mesh_secure ? "Encrypted (SAE)" : "Open");
+  setD("ip", st.mesh_ip || "\u2013");
+  setD("ssid", st.ap_ssid);
+  setD("apip", st.ap_ip || "\u2013");
+  setD("clients", st.ap_clients);
+  if (st.radio) {
+    setD("chan", st.radio.chan + " \u00b7 " + mhz(st.radio.mhz) + " MHz \u00b7 " + st.radio.bw + " MHz");
+    setD("prim", st.radio.prim_bw + " MHz at index " + st.radio.prim_idx);
+    setD("apch", st.radio.ap_chan + " (" + (2407 + 5 * st.radio.ap_chan) + " MHz)");
+  }
+
+  const list = $("peers");
+  list.textContent = "";
   if (!st.peers.length) {
-    const li = document.createElement("li");
-    li.innerHTML = '<span class="bad">No mesh nodes heard yet</span>';
-    ul.appendChild(li);
+    const e = document.createElement("div");
+    e.className = "empty";
+    e.textContent = "No mesh nodes heard yet";
+    list.appendChild(e);
   }
   for (const p of st.peers) {
-    const li = document.createElement("li");
-    const left = document.createElement("span"); left.className = "mono"; left.textContent = p.mac;
-    const right = document.createElement("span");
-    right.innerHTML = '<span class="pill ' + (p.peered ? "ok" : "warn") + '"></span>';
-    right.firstChild.textContent = (p.peered ? "linked" : p.state) + ", " + p.rssi + " dBm";
-    li.append(left, right);
-    ul.appendChild(li);
+    const row = document.createElement("div");
+    row.className = "node";
+    const t = document.createElement("div");
+    t.className = "t";
+    const mac = document.createElement("div"); mac.className = "mac mono"; mac.textContent = p.mac;
+    const sm = document.createElement("small"); sm.textContent = p.rssi + " dBm";
+    t.append(mac, sm);
+    const pill = document.createElement("span");
+    pill.className = "pill " + (p.peered ? "ok" : "warn");
+    pill.textContent = p.peered ? "linked" : p.state;
+    row.append(bars(p.rssi), t, pill);
+    list.appendChild(row);
   }
   $("nodes").textContent = st.peers.length
-    ? peered + " of " + st.peers.length + " nearby nodes linked; " + st.nodes.length + " node(s) reachable across the mesh."
-    : "";
+    ? peered + " of " + st.peers.length + " nearby nodes linked; " + st.nodes.length + " reachable across the mesh."
+    : "The meshpoint keeps listening on its HaLow channel.";
 
   if (!filled) {
     $("mesh_id").value = st.mesh_id;
@@ -275,6 +555,8 @@ async function refresh() {
   $("ro").hidden = canEdit;
   applyLock();
 }
+
+/* ---------- Actions ---------- */
 
 for (const b of document.querySelectorAll("[data-show]")) {
   b.addEventListener("click", () => {
@@ -301,8 +583,8 @@ function relogin(r) {
 }
 
 function waitForRestart() {
-  say("Restarting. Rejoin the hotspot if you changed its name or password, then reload this page.", "warn");
-  setTimeout(() => location.reload(), 20000);
+  say("Restarting. Rejoin the hotspot if you changed its name or password; this page reloads by itself.", "warn", true);
+  setTimeout(() => { location.hash = "#status"; location.reload(); }, 20000);
 }
 
 $("f").addEventListener("submit", async (e) => {
@@ -315,7 +597,7 @@ $("f").addEventListener("submit", async (e) => {
   if (!(radio.beacon >= 15 && radio.beacon <= 10000)) return say("Beacon interval must be 15 to 10000 TU.", "bad");
   if (!confirm("Save these settings? The meshpoint restarts and drops off the mesh for about 20 seconds.")) return;
   busy = true; applyLock();
-  say("Saving…");
+  say("Saving…", "", true);
   try {
     const r = await post("/api/settings", {
       mesh_id: $("mesh_id").value.trim(), mesh_password: mp, mesh_open: $("mesh_open").checked,
@@ -328,14 +610,12 @@ $("f").addEventListener("submit", async (e) => {
 });
 
 $("reset").addEventListener("click", async () => {
-  if (!confirm("Erase all settings? The meshpoint leaves the mesh and restarts with an open setup hotspot, " + $("title").textContent + "-Setup, where it waits to be set up again.")) return;
+  if (!confirm("Erase all settings? The meshpoint leaves the mesh and restarts with an open setup hotspot, " + apTitle + "-Setup, where it waits to be set up again.")) return;
   busy = true; applyLock();
   const r = await post("/api/reset");
   if (relogin(r)) return;
   if (r.ok) waitForRestart(); else { say(r.message, "bad"); busy = false; applyLock(); }
 });
-
-function psay(text, cls) { const m = $("p_msg"); m.textContent = text; m.className = cls || ""; }
 
 $("pf").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -344,7 +624,7 @@ $("pf").addEventListener("submit", async (e) => {
   if (nw.length < 8 || nw.length > 63) return psay("The new password needs 8 to 63 characters.", "bad");
   if (nw !== nw2) return psay("The two new passwords are different.", "bad");
   busy = true; applyLock();
-  psay("Saving…");
+  psay("Saving…", "", true);
   let r;
   try { r = await post("/api/password", { current: cur, password: nw }); }
   catch (err) { r = { ok: false, message: "Could not reach the meshpoint." }; }

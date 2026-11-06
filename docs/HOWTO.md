@@ -211,9 +211,10 @@ The board's LED blinks slowly while it waits to be set up.
 About 20 seconds after Finish:
 
 - **LED:** it goes off.
-- **Status page:** join your new hotspot, open `http://192.168.4.1` and sign in as root
-  with your new password. Under Mesh, your OpenMANET nodes are listed as **linked**, with
-  their signal strength. The page also shows the meshpoint's own mesh address.
+- **Status screen:** join your new hotspot, open `http://192.168.4.1` and sign in as root
+  with your new password. The top card says "Linked to N nodes", and the **Nodes** screen
+  lists your OpenMANET nodes as **linked**, with signal bars. The Status screen also shows
+  the meshpoint's own mesh address and HaLow channel.
 - **Serial log:** each node shows up as
 
   ```
@@ -231,15 +232,18 @@ About 20 seconds after Finish:
   OpenMANET node's web page at its address. Traffic is translated (NAT), so devices on the
   mesh see the meshpoint's mesh address, not your phone's.
 - The hotspot gives no DNS and no internet route, so use IP addresses.
-- To change the mesh, HaLow radio or hotspot settings, edit them on the page and tap
+- The page works like a phone app. The ☰ menu opens Status, Nodes, Device details, and one
+  screen for each setting: OpenMANET network, HaLow radio, Hotspot and Root password. Every
+  card on the Status screen opens its own page, and a back arrow returns to Status.
+- To change the mesh, HaLow radio or hotspot settings, open its screen, edit, and tap
   **Save and restart**. Leave a password field blank to keep the current one.
-- The **HaLow radio** section has the same choices as an OpenMANET node's channel settings:
+- The **HaLow radio** screen has the same choices as an OpenMANET node's channel settings:
   width, channel (with its frequency), primary width, primary index, beacon interval and
   transmit power. If you move the mesh to another channel, change every node and the
   meshpoint to match. A wrong channel only drops the meshpoint off the mesh. Its hotspot
   keeps working, so you can fix it from the page.
-- The hotspot section also picks the 2.4 GHz hotspot channel, shown with its frequency.
-- To change the root password, use the **Root password** section. It asks for the current
+- The **Hotspot** screen also picks the 2.4 GHz hotspot channel, shown with its frequency.
+- To change the root password, use the **Root password** screen. It asks for the current
   one first and signs everyone out.
 - Settings can only be changed from the meshpoint's own hotspot. Signed in over the mesh,
   you can look but not change anything.
@@ -250,8 +254,8 @@ About 20 seconds after Finish:
 
 Hold the **BOOT** button for 5 seconds while the board runs. The LED blinks fast; let go.
 The board erases every setting, root password included, and restarts in setup mode:
-`Meshpoint-XXXX-Setup`, user root, password openmanet. The **Erase settings and set up
-again** link at the bottom of the status page does the same.
+`Meshpoint-XXXX-Setup`, user root, password openmanet. **Start over** in the ☰ menu
+does the same.
 
 Holding BOOT while you plug the board in is different: that starts the ESP32's download
 mode for flashing (step 7).
@@ -285,9 +289,9 @@ After five wrong passwords, sign-in is locked for 30 seconds. Wait and try again
 The hotspot password is wrong. The serial log shows the phone joining and leaving with
 `reason = 15`. Do the BOOT reset (step 11) and set it up again.
 
-**The status page says "No mesh nodes heard yet".**
-The radio settings don't match your nodes. Compare the dashboard's HaLow radio section (or
-the HaLow channel line under Mesh) with the node's settings from step 3. Then check the
+**The Nodes screen says "No mesh nodes heard yet".**
+The radio settings don't match your nodes. Compare the HaLow radio screen (or the HaLow card
+on the Status screen) with the node's settings from step 3. Then check the
 HaLow antenna and the country code, and move the board closer to a node for the first
 test.
 
