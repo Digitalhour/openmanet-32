@@ -26,9 +26,41 @@ static bool get_str(nvs_handle_t h, const char *key, char *out, size_t size)
     return true;
 }
 
+/* The radio settings in NVS: a version byte, then the fields. */
+#define RADIO_BLOB_VERSION 1
+#define RADIO_BLOB_LEN 8
+
+static void radio_pack(const struct hop_radio *r, uint8_t b[RADIO_BLOB_LEN])
+{
+    b[0] = RADIO_BLOB_VERSION;
+    b[1] = r->s1g_chan;
+    b[2] = r->prim_bw_mhz;
+    b[3] = (uint8_t)r->prim_idx;
+    b[4] = r->beacon_tus & 0xff;
+    b[5] = r->beacon_tus >> 8;
+    b[6] = r->tx_dbm;
+    b[7] = r->ap_chan;
+}
+
+static bool radio_unpack(const uint8_t b[RADIO_BLOB_LEN], struct hop_radio *r)
+{
+    if (b[0] != RADIO_BLOB_VERSION)
+    {
+        return false;
+    }
+    r->s1g_chan = b[1];
+    r->prim_bw_mhz = b[2];
+    r->prim_idx = (int8_t)b[3];
+    r->beacon_tus = (uint16_t)(b[4] | b[5] << 8);
+    r->tx_dbm = b[6];
+    r->ap_chan = b[7];
+    return true;
+}
+
 void settings_load(struct hop_settings *s)
 {
     memset(s, 0, sizeof(*s));
+    radio_defaults(&s->radio);
     strlcpy(s->mesh_id, CONFIG_HOP_MESH_ID, sizeof(s->mesh_id));
     if (CONFIG_HOP_AP_SSID[0] != '\0')
     {
@@ -56,13 +88,24 @@ void settings_load(struct hop_settings *s)
         all &= get_str(h, "ap_pw", got.ap_password, sizeof(got.ap_password));
         size_t hl = sizeof(got.root_hash);
         all &= nvs_get_blob(h, "root_pw", got.root_hash, &hl) == ESP_OK && hl == sizeof(got.root_hash);
-        nvs_close(h);
         if (all)
         {
             *s = got;
             s->configured = true;
         }
         memset(&got, 0, sizeof(got));
+        /* The radio settings are optional: a board saved before they existed keeps the build's
+         * defaults, which are what it ran with. Saved ones that no longer check out (say, a
+         * channel the table lost) are ignored the same way. */
+        uint8_t b[RADIO_BLOB_LEN];
+        size_t bl = sizeof(b);
+        struct hop_radio r;
+        const char *why;
+        if (nvs_get_blob(h, "radio", b, &bl) == ESP_OK && bl == sizeof(b) && radio_unpack(b, &r) && radio_valid(&r, &why))
+        {
+            s->radio = r;
+        }
+        nvs_close(h);
     }
     ESP_LOGI(TAG, "%s", s->configured ? "Settings loaded" : "Nothing saved: setup mode");
 }
@@ -123,9 +166,13 @@ esp_err_t settings_save(const struct hop_settings *s)
     if (err == ESP_OK) err = nvs_set_str(h, "ap_ssid", s->ap_ssid);
     if (err == ESP_OK) err = nvs_set_str(h, "ap_pw", s->ap_password);
     if (err == ESP_OK) err = nvs_set_blob(h, "root_pw", s->root_hash, sizeof(s->root_hash));
+    uint8_t b[RADIO_BLOB_LEN];
+    radio_pack(&s->radio, b);
+    if (err == ESP_OK) err = nvs_set_blob(h, "radio", b, sizeof(b));
     if (err == ESP_OK) err = nvs_commit(h);
     nvs_close(h);
-    ESP_LOGI(TAG, "Settings saved (mesh \"%s\", hotspot \"%s\")", s->mesh_id, s->ap_ssid);
+    ESP_LOGI(TAG, "Settings saved (mesh \"%s\", hotspot \"%s\", HaLow channel %u)", s->mesh_id, s->ap_ssid,
+             s->radio.s1g_chan);
     return err;
 }
 

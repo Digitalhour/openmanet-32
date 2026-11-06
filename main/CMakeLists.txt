@@ -1,8 +1,8 @@
 idf_component_register(
-    SRCS "hop_main.c" "mesh.c" "mesh_sec.c" "batadv.c" "settings.c" "auth.c" "hotspot.c" "captive_dns.c"
+    SRCS "hop_main.c" "mesh.c" "mesh_sec.c" "batadv.c" "settings.c" "radio.c" "auth.c" "hotspot.c" "captive_dns.c"
     INCLUDE_DIRS "."
     REQUIRES halow nvs_flash esp_wifi esp_netif esp_event esp_timer lwip esp_driver_spi esp_driver_gpio mbedtls esp_http_server json
-    EMBED_TXTFILES "page.html" "setup.html"
+    EMBED_TXTFILES "page.html" "setup.html" "radio.js"
     EMBED_FILES "board.webp"
 )
 

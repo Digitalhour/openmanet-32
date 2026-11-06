@@ -11,33 +11,33 @@ menu "openmanet-32"
     config HOP_S1G_CHANNEL
         int "HaLow channel (S1G channel number)"
         range 1 51
-        default 26
-
-    config HOP_S1G_OPCLASS
-        int "HaLow operating class"
-        range 68 71
-        default 69
+        default 28
+        help
+            The default before anything is chosen on the page. The channel's width,
+            frequency and operating class come from the country's channel table, as on
+            OpenMANET. OpenMANET's US default is channel 28 (916 MHz, 8 MHz wide).
 
     config HOP_PRI_BW_MHZ
-        int "Primary channel width in MHz (0 = default)"
+        int "Primary channel width in MHz (0 = auto)"
         range 0 2
         default 0
         help
-            Must match the Linux nodes: OpenMANET's s1g_prim_chwidth=1 means 2 MHz.
+            Auto, as OpenMANET does it: 2 MHz on 4 and 8 MHz channels, else 1 MHz.
+            (In OpenMANET's wpa_supplicant config s1g_prim_chwidth=1 means 2 MHz.)
 
     config HOP_PRI_1MHZ_IDX
-        int "Primary 1 MHz channel index inside the channel"
-        range 0 7
-        default 0
+        int "Primary 1 MHz channel index inside the channel (-1 = auto)"
+        range -1 7
+        default -1
         help
-            Must match the Linux nodes' s1g_prim_1mhz_chan_index.
+            Auto, as OpenMANET does it: (channel width - 1) / 2, so 3 on an 8 MHz channel.
 
     config HOP_BEACON_TUS
-        int "Beacon interval in TU (0 = default)"
-        range 0 10000
-        default 0
+        int "Beacon interval in TU"
+        range 15 10000
+        default 1000
         help
-            OpenMANET uses 1000.
+            OpenMANET's mesh default is 1000.
 
     config HOP_TX_DBM
         int "Cap HaLow TX power (dBm, 0 = regulatory maximum)"
@@ -79,7 +79,7 @@ menu "openmanet-32"
             page. The page can change it; this is the value before anything is saved there.
 
     config HOP_AP_CHANNEL
-        int "Hotspot 2.4 GHz channel"
+        int "Hotspot 2.4 GHz channel (the default before the page sets one)"
         range 1 13
         default 6
 

@@ -44,6 +44,13 @@
   .done ol { padding-left: 20px; margin: 8px 0 0; }
   .done li { margin: 6px 0; }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+  select {
+    width: 100%; padding: 11px 12px; font-size: 16px; color: var(--text); background: var(--field);
+    border: 1px solid var(--line); border-radius: 8px; font-family: inherit; }
+  select:focus { outline: 2px solid var(--accent-text); outline-offset: -1px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  details { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+  summary { cursor: pointer; color: var(--accent-text); font-size: 15px; }
   .hero { display: block; width: 160px; height: 160px; margin: 8px auto 4px; }
   #login h1, #login .sub { text-align: center; }
 </style>
@@ -98,6 +105,30 @@
         <button type="button" class="link" data-show="mesh_password">Show</button>
       </div>
       <label class="check"><input type="checkbox" id="mesh_open"> This mesh has no password</label>
+      <details id="radio">
+        <summary>Radio settings</summary>
+        <p class="hint">Already set to OpenMANET's defaults. Change them only if your nodes use another
+          channel (in LuCI: Network, Wireless, the HaLow radio's channel settings).</p>
+        <div class="grid2">
+          <div>
+            <label for="r_width">Width</label>
+            <select id="r_width"></select>
+          </div>
+          <div>
+            <label for="r_chan">Channel</label>
+            <select id="r_chan"></select>
+          </div>
+          <div>
+            <label for="r_pbw">Primary width</label>
+            <select id="r_pbw"></select>
+          </div>
+          <div>
+            <label for="r_pidx">Primary index</label>
+            <select id="r_pidx"></select>
+          </div>
+        </div>
+        <p class="hint" id="r_info"></p>
+      </details>
     </section>
 
     <section>
@@ -133,6 +164,7 @@
   </section>
 </main>
 
+<script src="/radio.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 
@@ -184,6 +216,7 @@ $("f").addEventListener("submit", async (e) => {
     root_password: $("root_password").value,
     mesh_id: $("mesh_id").value.trim(), mesh_password: $("mesh_password").value, mesh_open: $("mesh_open").checked,
     ap_ssid: $("ap_ssid").value.trim(), ap_password: $("ap_password").value,
+    radio: Radio.loaded() ? Radio.values() : undefined,
   };
   try {
     const r = await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -243,6 +276,7 @@ async function start() {
   try { st = await r.json(); } catch (e) {}
   $("mesh_id").value = $("mesh_id").value || st.mesh_id || "";
   $("ap_ssid").value = $("ap_ssid").value || st.ap_ssid || "";
+  if (!Radio.loaded()) Radio.load().catch(() => {});
   $("login").hidden = true;
   $("f").hidden = false;
   $("root_password").focus();

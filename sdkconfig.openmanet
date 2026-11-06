@@ -1,10 +1,10 @@
-# Radio settings to match OpenMANET HT-HD01 meshpoints: US channel 28, 8 MHz (op class 71),
-# 2 MHz primary at 1 MHz index 3, 1000 TU beacons. Bench TX cap 8 dBm (USB power).
-# The mesh name and password are not built in: the owner sets them on the first-boot setup
-# page (hotspot.c).
+# Radio defaults that match an OpenMANET mesh as it ships in the US: channel 28 (916 MHz,
+# 8 MHz wide), primary width and index on auto (2 MHz at index 3, as OpenMANET works them
+# out), 1000 TU beacons. TX capped at 8 dBm for USB power. These are only the starting
+# values: the settings page changes all of them. The mesh name and password are not built
+# in either; the owner sets them on the first-boot setup page.
 CONFIG_HOP_S1G_CHANNEL=28
-CONFIG_HOP_S1G_OPCLASS=71
-CONFIG_HOP_PRI_BW_MHZ=2
-CONFIG_HOP_PRI_1MHZ_IDX=3
+CONFIG_HOP_PRI_BW_MHZ=0
+CONFIG_HOP_PRI_1MHZ_IDX=-1
 CONFIG_HOP_BEACON_TUS=1000
 CONFIG_HOP_TX_DBM=8

@@ -9,7 +9,7 @@ first time.
 3. [Read your mesh settings from an OpenMANET node](#3-read-your-mesh-settings-from-an-openmanet-node)
 4. [Install ESP-IDF 5.4.4](#4-install-esp-idf-544)
 5. [Get the code](#5-get-the-code)
-6. [Match the radio settings (only if yours differ)](#6-match-the-radio-settings-only-if-yours-differ)
+6. [Optional: change the starting radio settings](#6-optional-change-the-starting-radio-settings)
 7. [Build and flash](#7-build-and-flash)
 8. [Set it up from your phone](#8-set-it-up-from-your-phone)
 9. [Check that it joined the mesh](#9-check-that-it-joined-the-mesh)
@@ -62,19 +62,20 @@ You type these on the meshpoint's setup page later. They are not built into the 
 grep -E "country|channel|op_class|s1g_prim|beacon_int|ieee80211w" /var/run/wpa_supplicant-*.conf
 ```
 
-Compare what it prints with OpenMANET's US defaults, which the firmware already uses:
+Or in LuCI, look at the HaLow radio's channel settings (Network, then Wireless). Compare
+with OpenMANET's US defaults, which the meshpoint starts with:
 
-| On the node | OpenMANET default | Firmware option |
+| On the node | OpenMANET default | On the meshpoint's page |
 |---|---|---|
-| `country` | `US` | `CONFIG_HALOW_COUNTRY_CODE` in `sdkconfig.defaults` |
-| `channel` | `28` | `CONFIG_HOP_S1G_CHANNEL` |
-| `op_class` | `71` (8 MHz) | `CONFIG_HOP_S1G_OPCLASS` |
-| `s1g_prim_chwidth` | `1` (means 2 MHz; `0` means 1 MHz) | `CONFIG_HOP_PRI_BW_MHZ` (`2` or `1`) |
-| `s1g_prim_1mhz_chan_index` | `3` | `CONFIG_HOP_PRI_1MHZ_IDX` |
-| `beacon_int` | `1000` | `CONFIG_HOP_BEACON_TUS` |
+| `country` | `US` | fixed at build time (`CONFIG_HALOW_COUNTRY_CODE`) |
+| `channel` | `28` | Width 8 MHz, Channel "28 (916 MHz)" |
+| `op_class` | `71` (8 MHz) | follows from the channel |
+| `s1g_prim_chwidth` | `1` (means 2 MHz; `0` means 1 MHz) | Primary width: auto (or 2 MHz) |
+| `s1g_prim_1mhz_chan_index` | `3` | Primary index: auto (or 3) |
+| `beacon_int` | `1000` | Beacon interval 1000 |
 | `ieee80211w` | `2` (protected frames required) | always on for a mesh with a password |
 
-If everything matches, skip step 6.
+If yours differ, you set them on the setup page in step 8 (no rebuild needed).
 
 ## 4. Install ESP-IDF 5.4.4
 
@@ -114,25 +115,30 @@ cd openmanet-32
 
 (Or use Code, then Download ZIP, and unpack it.)
 
-## 6. Match the radio settings (only if yours differ)
+## 6. Optional: change the starting radio settings
 
-Open `sdkconfig.openmanet` in a text editor and change the values to match the table in
-step 3:
+You can skip this: the channel and the rest are chosen on the board's page. Change them here
+only if you flash many boards for a mesh that isn't on OpenMANET's defaults, so each one
+starts on the right channel.
+
+The values a fresh board starts with are in `sdkconfig.openmanet`:
 
 ```
 CONFIG_HOP_S1G_CHANNEL=28
-CONFIG_HOP_S1G_OPCLASS=71
-CONFIG_HOP_PRI_BW_MHZ=2
-CONFIG_HOP_PRI_1MHZ_IDX=3
+CONFIG_HOP_PRI_BW_MHZ=0
+CONFIG_HOP_PRI_1MHZ_IDX=-1
 CONFIG_HOP_BEACON_TUS=1000
 CONFIG_HOP_TX_DBM=8
 ```
 
-The country code is `CONFIG_HALOW_COUNTRY_CODE` in `sdkconfig.defaults`. Set it for where
-you operate.
+`0` and `-1` mean auto. The operating class and width follow from the channel.
 
-`CONFIG_HOP_TX_DBM` caps the HaLow transmit power. 8 dBm keeps the board stable on USB
-power. With a proper supply you can raise it, within your local legal limit.
+**Country code:** this one is only a build setting. It is `CONFIG_HALOW_COUNTRY_CODE` in
+`sdkconfig.defaults`; set it for where you operate. It decides which channels and power levels
+the page offers.
+
+**Transmit power:** `CONFIG_HOP_TX_DBM` caps the HaLow transmit power. 8 dBm keeps the board
+stable on USB power. With a proper supply you can raise it, within your local legal limit.
 
 You can also change all of these interactively with `idf.py menuconfig`, under
 "openmanet-32".
@@ -190,7 +196,9 @@ The board's LED blinks slowly while it waits to be set up.
    from now on, 8 to 63 characters, and type it twice.
 5. **Step 2, your OpenMANET network:** enter the mesh name and password from step 3,
    exactly as on the node. They are case-sensitive. If your mesh has no password, tick
-   "This mesh has no password".
+   "This mesh has no password". If your nodes are not on OpenMANET's default channel, open
+   **Radio settings** below it and pick the same width, channel and primary settings as the
+   node (step 3).
 6. **Step 3, the hotspot:** choose the Wi-Fi name and password (8 to 63 characters) that
    phones and laptops will use to connect to this meshpoint. Tap **Show** to check what
    you typed.
@@ -223,8 +231,14 @@ About 20 seconds after Finish:
   OpenMANET node's web page at its address. Traffic is translated (NAT), so devices on the
   mesh see the meshpoint's mesh address, not your phone's.
 - The hotspot gives no DNS and no internet route, so use IP addresses.
-- To change the mesh or hotspot settings, edit them on the page and tap
+- To change the mesh, HaLow radio or hotspot settings, edit them on the page and tap
   **Save and restart**. Leave a password field blank to keep the current one.
+- The **HaLow radio** section has the same choices as an OpenMANET node's channel settings:
+  width, channel (with its frequency), primary width, primary index, beacon interval and
+  transmit power. If you move the mesh to another channel, change every node and the
+  meshpoint to match. A wrong channel only drops the meshpoint off the mesh. Its hotspot
+  keeps working, so you can fix it from the page.
+- The hotspot section also picks the 2.4 GHz hotspot channel, shown with its frequency.
 - To change the root password, use the **Root password** section. It asks for the current
   one first and signs everyone out.
 - Settings can only be changed from the meshpoint's own hotspot. Signed in over the mesh,
@@ -272,8 +286,9 @@ The hotspot password is wrong. The serial log shows the phone joining and leavin
 `reason = 15`. Do the BOOT reset (step 11) and set it up again.
 
 **The status page says "No mesh nodes heard yet".**
-The radio settings don't match your nodes. Check them again (step 3 and step 6). Then check
-the HaLow antenna and the country code, and move the board closer to a node for the first
+The radio settings don't match your nodes. Compare the dashboard's HaLow radio section (or
+the HaLow channel line under Mesh) with the node's settings from step 3. Then check the
+HaLow antenna and the country code, and move the board closer to a node for the first
 test.
 
 **Nodes are heard but never "linked".**
@@ -282,6 +297,10 @@ Usually the mesh name or password doesn't match. The serial log repeats lines li
 tell a radio problem from a password problem, `docs/openmanet-test-mesh.sh` moves one node
 to an open test mesh: set the meshpoint up with that mesh name and "no password", then put
 the node back with `docs/openmanet-test-mesh-undo.sh`.
+
+**The log repeats `SAE with ... failed: no answer` right after a quick restart.**
+If the board restarted within a minute of linking, the nodes can ignore its handshake for
+several minutes. Wait, or restart the board once more (unplug and plug it back in).
 
 **The log says a node "wants hash-to-element SAE".**
 That node uses a newer kind of SAE than this firmware does. OpenMANET 1.8.0's mesh does not.

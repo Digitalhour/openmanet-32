@@ -22,6 +22,7 @@
 #include "batadv.h"
 #include "captive_dns.h"
 #include "mesh.h"
+#include "radio.h"
 
 static const char *TAG = "hotspot";
 
@@ -31,6 +32,8 @@ extern const char setup_html_start[] asm("_binary_setup_html_start");
 extern const char setup_html_end[] asm("_binary_setup_html_end");
 extern const char board_webp_start[] asm("_binary_board_webp_start");
 extern const char board_webp_end[] asm("_binary_board_webp_end");
+extern const char radio_js_start[] asm("_binary_radio_js_start");
+extern const char radio_js_end[] asm("_binary_radio_js_end");
 
 static struct hop_settings s_running;   /* what this boot runs with */
 static bool s_setup;                    /* nothing saved yet: open setup hotspot, no mesh */
@@ -149,7 +152,7 @@ void hotspot_prepare(const struct hop_settings *running)
         strlcpy((char *)cfg.ap.password, s_running.ap_password, sizeof(cfg.ap.password));
         cfg.ap.authmode = WIFI_AUTH_WPA2_PSK;
     }
-    cfg.ap.channel = CONFIG_HOP_AP_CHANNEL;
+    cfg.ap.channel = s_running.radio.ap_chan;
     cfg.ap.max_connection = 4;
     cfg.ap.pmf_cfg.capable = true;
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
@@ -320,6 +323,14 @@ static esp_err_t board_get(httpd_req_t *req)
     return httpd_resp_send(req, board_webp_start, board_webp_end - board_webp_start);
 }
 
+/* The radio form's script, shared by the setup and settings pages. */
+static esp_err_t radio_js_get(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "text/javascript");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, radio_js_start, radio_js_end - radio_js_start - 1);
+}
+
 /* Setup mode: every other address (a phone's captive-portal check, any page a person types)
  * is sent to the setup page. iOS needs a body with the redirect to treat it as a portal
  * (ESP-IDF captive_portal example, http_404_error_handler). */
@@ -362,6 +373,18 @@ static esp_err_t status_get(httpd_req_t *req)
     wifi_sta_list_t stas;
     cJSON_AddNumberToObject(root, "ap_clients", esp_wifi_ap_get_sta_list(&stas) == ESP_OK ? stas.num : 0);
 
+    /* The radio this boot runs with, auto settings worked out. */
+    const struct mmwlan_s1g_channel *ch = radio_find(s_running.radio.s1g_chan);
+    uint8_t pbw, pidx;
+    radio_resolve(&s_running.radio, &pbw, &pidx);
+    cJSON *rd = cJSON_AddObjectToObject(root, "radio");
+    cJSON_AddNumberToObject(rd, "chan", s_running.radio.s1g_chan);
+    cJSON_AddNumberToObject(rd, "mhz", ch ? ch->centre_freq_hz / 1e6 : 0);
+    cJSON_AddNumberToObject(rd, "bw", ch ? ch->bw_mhz : 0);
+    cJSON_AddNumberToObject(rd, "prim_bw", pbw);
+    cJSON_AddNumberToObject(rd, "prim_idx", pidx);
+    cJSON_AddNumberToObject(rd, "ap_chan", s_running.radio.ap_chan);
+
     /* In setup mode the mesh and batman never start, and their getters take locks that only
      * exist once they have. */
     struct mesh_neighbour nb[8];
@@ -392,6 +415,84 @@ static esp_err_t status_get(httpd_req_t *req)
         cJSON_AddItemToArray(nodes, o);
     }
     return send_json(req, root);
+}
+
+/* The radio form's data: the country's channel table (the same rows as OpenMANET's
+ * channels.csv) and the saved choices, with auto kept as auto. */
+static esp_err_t radio_get(httpd_req_t *req)
+{
+    if (!signed_in(req))
+    {
+        return need_login(req);
+    }
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "country", CONFIG_HALOW_COUNTRY_CODE);
+    cJSON_AddNumberToObject(root, "ap_max_chan", radio_ap_max_chan());
+    cJSON *chans = cJSON_AddArrayToObject(root, "channels");
+    const struct mmwlan_s1g_channel_list *list = radio_channels();
+    for (unsigned i = 0; list != NULL && i < list->num_channels; i++)
+    {
+        const struct mmwlan_s1g_channel *c = &list->channels[i];
+        cJSON *o = cJSON_CreateObject();
+        cJSON_AddNumberToObject(o, "chan", c->s1g_chan_num);
+        cJSON_AddNumberToObject(o, "mhz", c->centre_freq_hz / 1e6);
+        cJSON_AddNumberToObject(o, "bw", c->bw_mhz);
+        cJSON_AddNumberToObject(o, "op", c->global_operating_class);
+        cJSON_AddItemToArray(chans, o);
+    }
+    const struct hop_radio *r = &s_running.radio;
+    cJSON *saved = cJSON_AddObjectToObject(root, "saved");
+    cJSON_AddNumberToObject(saved, "chan", r->s1g_chan);
+    cJSON_AddNumberToObject(saved, "prim_bw", r->prim_bw_mhz);
+    cJSON_AddNumberToObject(saved, "prim_idx", r->prim_idx);
+    cJSON_AddNumberToObject(saved, "beacon", r->beacon_tus);
+    cJSON_AddNumberToObject(saved, "tx_dbm", r->tx_dbm);
+    cJSON_AddNumberToObject(saved, "ap_chan", r->ap_chan);
+    return send_json(req, root);
+}
+
+/* Reads the optional "radio" object of a settings request into r. False if it is there but
+ * malformed. */
+static bool take_radio(const cJSON *root, struct hop_radio *r)
+{
+    const cJSON *o = cJSON_GetObjectItemCaseSensitive(root, "radio");
+    if (o == NULL)
+    {
+        return true;
+    }
+    if (!cJSON_IsObject(o))
+    {
+        return false;
+    }
+    struct
+    {
+        const char *key;
+        int lo, hi;
+        int value;
+    } f[] = {
+        { "chan", 1, 255, r->s1g_chan },     { "prim_bw", 0, 2, r->prim_bw_mhz }, { "prim_idx", -1, 7, r->prim_idx },
+        { "beacon", 1, 65535, r->beacon_tus }, { "tx_dbm", 0, 255, r->tx_dbm },  { "ap_chan", 1, 14, r->ap_chan },
+    };
+    for (size_t i = 0; i < sizeof(f) / sizeof(f[0]); i++)
+    {
+        const cJSON *v = cJSON_GetObjectItemCaseSensitive(o, f[i].key);
+        if (v == NULL)
+        {
+            continue;
+        }
+        if (!cJSON_IsNumber(v) || v->valuedouble != (double)v->valueint || v->valueint < f[i].lo || v->valueint > f[i].hi)
+        {
+            return false;
+        }
+        f[i].value = v->valueint;
+    }
+    r->s1g_chan = (uint8_t)f[0].value;
+    r->prim_bw_mhz = (uint8_t)f[1].value;
+    r->prim_idx = (int8_t)f[2].value;
+    r->beacon_tus = (uint16_t)f[3].value;
+    r->tx_dbm = (uint8_t)f[4].value;
+    r->ap_chan = (uint8_t)f[5].value;
+    return true;
 }
 
 static void restart_task(void *arg)
@@ -478,6 +579,7 @@ static esp_err_t settings_post(httpd_req_t *req)
     fits &= take(root, "ap_ssid", next.ap_ssid, sizeof(next.ap_ssid), false);
     fits &= take(root, "ap_password", next.ap_password, sizeof(next.ap_password), true);
     bool open_mesh = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(root, "mesh_open"));
+    bool radio_ok = take_radio(root, &next.radio);
     /* Setup replaces the default root password; later changes go through /api/password. */
     char root_pw[64] = "";
     if (s_setup)
@@ -497,7 +599,16 @@ static esp_err_t settings_post(httpd_req_t *req)
         fits = false;
         why = "Enter the mesh password, or tick Open network";
     }
+    if (fits && !radio_ok)
+    {
+        fits = false;
+        why = "The radio settings are malformed";
+    }
     if (fits && !settings_valid(&next, &why))
+    {
+        fits = false;
+    }
+    if (fits && !radio_valid(&next.radio, &why))
     {
         fits = false;
     }
@@ -673,7 +784,7 @@ static void web_start(void)
     cfg.stack_size = 8192;
     cfg.lru_purge_enable = true;
     cfg.max_open_sockets = 5;
-    cfg.max_uri_handlers = 10;
+    cfg.max_uri_handlers = 12;
     httpd_handle_t server = NULL;
     if (httpd_start(&server, &cfg) != ESP_OK)
     {
@@ -683,6 +794,8 @@ static void web_start(void)
     const httpd_uri_t routes[] = {
         { .uri = "/", .method = HTTP_GET, .handler = page_get },
         { .uri = "/board.webp", .method = HTTP_GET, .handler = board_get },
+        { .uri = "/radio.js", .method = HTTP_GET, .handler = radio_js_get },
+        { .uri = "/api/radio", .method = HTTP_GET, .handler = radio_get },
         { .uri = "/api/status", .method = HTTP_GET, .handler = status_get },
         { .uri = "/api/settings", .method = HTTP_POST, .handler = settings_post },
         { .uri = "/api/reset", .method = HTTP_POST, .handler = reset_post },
@@ -720,5 +833,5 @@ void hotspot_start(esp_netif_t *mesh_netif)
     }
     s_ready = true;
     ESP_LOGI(TAG, "%s \"%s\" on channel %d, page at http://%s/", s_setup ? "Setup hotspot (open)" : "Hotspot", s_ap_name,
-             CONFIG_HOP_AP_CHANNEL, CONFIG_HOP_AP_IP);
+             s_running.radio.ap_chan, CONFIG_HOP_AP_IP);
 }

@@ -48,6 +48,11 @@
   button:disabled { opacity: .5; cursor: default; }
   #msg, #l_msg, #p_msg { min-height: 1.4em; margin: 10px 0 0; font-size: 14px; }
   .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  select, input[type=number] {
+    width: 100%; padding: 10px 12px; font-size: 16px; color: var(--text); background: var(--field);
+    border: 1px solid var(--line); border-radius: 8px; font-family: inherit; }
+  select:focus, input[type=number]:focus { outline: 2px solid var(--accent-text); outline-offset: -1px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
   .hero { display: block; width: 160px; height: 160px; margin: 8px auto 4px; }
   #login h1, #login > .sub { text-align: center; }
   .notice { font-size: 14px; color: var(--warn); margin: 0 0 14px; }
@@ -89,6 +94,7 @@
       <dt>Security</dt><dd id="s-sec">&ndash;</dd>
       <dt>Mesh address</dt><dd id="s-ip" class="mono">&ndash;</dd>
       <dt>Hotspot clients</dt><dd id="s-clients">&ndash;</dd>
+      <dt>HaLow channel</dt><dd id="s-chan">&ndash;</dd>
       <dt>Up for</dt><dd id="s-up">&ndash;</dd>
     </dl>
     <ul id="peers"></ul>
@@ -113,6 +119,43 @@
     </section>
 
     <section>
+      <h2>HaLow radio</h2>
+      <div class="grid2">
+        <div>
+          <label for="r_width">Width</label>
+          <select id="r_width"></select>
+        </div>
+        <div>
+          <label for="r_chan">Channel</label>
+          <select id="r_chan"></select>
+        </div>
+        <div>
+          <label for="r_pbw">Primary width</label>
+          <select id="r_pbw"></select>
+        </div>
+        <div>
+          <label for="r_pidx">Primary index</label>
+          <select id="r_pidx"></select>
+        </div>
+      </div>
+      <p class="hint" id="r_info"></p>
+      <div class="grid2">
+        <div>
+          <label for="r_beacon">Beacon interval (TU)</label>
+          <input type="number" id="r_beacon" min="15" max="10000" step="1">
+        </div>
+        <div>
+          <label for="r_tx">Transmit power</label>
+          <select id="r_tx"></select>
+        </div>
+      </div>
+      <p class="hint">Same choices as the HaLow radio on your OpenMANET nodes (in LuCI: Network,
+        Wireless, the HaLow radio's channel settings). Every node must use the same channel and
+        primary settings. OpenMANET's beacon interval for a mesh is 1000. On USB power keep the
+        transmit power at 8 dBm or lower.</p>
+    </section>
+
+    <section>
       <h2>This meshpoint's hotspot</h2>
       <label for="ap_ssid">Hotspot name</label>
       <input type="text" id="ap_ssid" maxlength="32" required autocapitalize="off" spellcheck="false">
@@ -122,6 +165,8 @@
         <button type="button" class="link" data-show="ap_password">Show</button>
       </div>
       <p class="hint">8 to 63 characters. If you change the hotspot name or password, rejoin with the new ones after the restart.</p>
+      <label for="r_ap">Hotspot channel (2.4 GHz)</label>
+      <select id="r_ap"></select>
     </section>
 
     <button type="submit" class="primary" id="save">Save and restart</button>
@@ -150,12 +195,13 @@
   </div>
 </main>
 
+<script src="/radio.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 let filled = false, canEdit = false, busy = false;
 
 function applyLock() {
-  for (const el of document.querySelectorAll("#f input, #f button, #pf input, #pf button, #reset")) el.disabled = !canEdit || busy;
+  for (const el of document.querySelectorAll("#f input, #f select, #f button, #pf input, #pf button, #reset")) el.disabled = !canEdit || busy;
   $("mesh_password").disabled = !canEdit || busy || $("mesh_open").checked;
 }
 
@@ -193,6 +239,10 @@ async function refresh() {
   $("s-ip").textContent = st.mesh_ip || "–";
   $("s-clients").textContent = st.ap_clients;
   $("s-up").textContent = upFor(st.uptime_s);
+  if (st.radio) {
+    $("s-chan").textContent = st.radio.chan + " (" + (Math.round(st.radio.mhz * 1000) / 1000) + " MHz), " + st.radio.bw +
+      " MHz wide; primary " + st.radio.prim_bw + " MHz at index " + st.radio.prim_idx;
+  }
 
   const peered = st.peers.filter((p) => p.peered).length;
   const ul = $("peers");
@@ -220,6 +270,7 @@ async function refresh() {
     $("ap_ssid").value = st.ap_ssid;
     $("mesh_open").checked = !st.mesh_secure;
     filled = true;
+    Radio.load().then(applyLock).catch(() => say("Could not load the radio settings. Reload the page.", "bad"));
   }
   $("ro").hidden = canEdit;
   applyLock();
@@ -259,13 +310,16 @@ $("f").addEventListener("submit", async (e) => {
   const mp = $("mesh_password").value, ap = $("ap_password").value;
   if (!$("mesh_open").checked && mp && (mp.length < 8 || mp.length > 63)) return say("Mesh password must be 8 to 63 characters.", "bad");
   if (ap && (ap.length < 8 || ap.length > 63)) return say("Hotspot password must be 8 to 63 characters.", "bad");
+  if (!Radio.loaded()) return say("The radio settings haven't loaded yet. Reload the page.", "bad");
+  const radio = Radio.values();
+  if (!(radio.beacon >= 15 && radio.beacon <= 10000)) return say("Beacon interval must be 15 to 10000 TU.", "bad");
   if (!confirm("Save these settings? The meshpoint restarts and drops off the mesh for about 20 seconds.")) return;
   busy = true; applyLock();
   say("Saving…");
   try {
     const r = await post("/api/settings", {
       mesh_id: $("mesh_id").value.trim(), mesh_password: mp, mesh_open: $("mesh_open").checked,
-      ap_ssid: $("ap_ssid").value.trim(), ap_password: ap,
+      ap_ssid: $("ap_ssid").value.trim(), ap_password: ap, radio,
     });
     $("mesh_password").value = ""; $("ap_password").value = "";
     if (relogin(r)) return;

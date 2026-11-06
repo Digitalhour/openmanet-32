@@ -35,7 +35,8 @@ troubleshooting. The rest of this page is the short version.
 Seeed's [Getting Started with Wi-Fi HaLow Module for XIAO](https://wiki.seeedstudio.com/getting_started_with_wifi_halow_module_for_xiao/)
 shows how the two boards fit together. The pin map is in `sdkconfig.defaults.esp32s3`. On USB power the HaLow transmit power is capped
 at 8 dBm and the hotspot at 11 dBm, because the two radios together can draw more than a USB
-port supplies. Raise `HOP_TX_DBM` for a node with a proper supply.
+port supplies. Raise the HaLow cap on the dashboard (HaLow radio, Transmit power) for a node
+with a proper supply.
 
 ## Tested with
 
@@ -57,9 +58,9 @@ idf.py build
 idf.py -p /dev/cu.usbmodemXXXX flash monitor
 ```
 
-The radio settings default to OpenMANET's US defaults. If your mesh uses others, change
-them before building (see [Radio settings](#radio-settings) and step 3 of the
-[how-to](docs/HOWTO.md#3-read-your-mesh-settings-from-an-openmanet-node)).
+The radio starts on OpenMANET's US defaults. If your mesh uses another channel, pick it on
+the setup page or the dashboard (see [Radio settings](#radio-settings) and step 3 of the
+[how-to](docs/HOWTO.md#3-read-your-mesh-settings-from-an-openmanet-node)); no rebuild needed.
 
 ## First-time setup
 
@@ -82,11 +83,11 @@ Join the board's hotspot and open `http://192.168.4.1`. Sign in as root with you
 to see:
 - the mesh nodes it hears, linked or not, with signal strength;
 - the nodes reachable across the mesh;
-- its mesh address;
+- its mesh address and HaLow channel;
 - the hotspot clients.
 
-From the same page you can change the mesh and hotspot settings (the board restarts) or the
-root password (no restart; everyone is signed out). Changes are only accepted from the
+From the same page you can change the mesh, HaLow radio and hotspot settings (the board
+restarts) or the root password (no restart; everyone is signed out). Changes are only accepted from the
 board's own hotspot. Over the mesh, root can sign in and look but not change anything.
 
 Hotspot clients reach the mesh through NAT. The board offers no DNS, since an OpenMANET mesh
@@ -104,20 +105,35 @@ Sign-in details:
 
 ## Radio settings
 
-The radio settings are build-time options in `sdkconfig.openmanet`, matching OpenMANET's
-defaults:
-- US channel 28, 8 MHz wide (operating class 71);
-- 2 MHz primary at 1 MHz index 3;
-- 1000 TU beacons.
+The dashboard's **HaLow radio** section (and the **Radio settings** box in the setup
+wizard) offers the same choices as the HaLow radio settings on an OpenMANET node, from the
+same channel table (Morse Micro's, which OpenMANET ships as
+`/usr/share/morse-regdb/channels.csv`):
+- **Width**: 1, 2, 4 or 8 MHz.
+- **Channel**: the country's channels of that width, shown as number and centre frequency,
+  for example "28 (916 MHz)". The operating class follows from the channel.
+- **Primary width**: auto, 2 MHz or 1 MHz. Auto works it out as OpenMANET does: 2 MHz on 4
+  and 8 MHz channels, else 1 MHz.
+- **Primary index**: auto, or one of the 1 MHz positions OpenMANET's own page allows. Auto is
+  (width - 1) / 2.
+- **Beacon interval**: OpenMANET's mesh default is 1000 TU.
+- **Transmit power**: driver default (the regulatory maximum) or a cap from 1 to 30 dBm.
 
-If your mesh uses another channel, change them there or in `idf.py menuconfig` under
-"openmanet-32" before building. They are not on the web page. The same menu has:
-- the hotspot channel (6) and address (192.168.4.1);
+The hotspot section also picks the 2.4 GHz hotspot channel. Saving restarts the board.
+Every node in a mesh must use the same channel and primary settings. If you pick a wrong
+one, the board drops off the mesh but its hotspot still works, so you can fix it from the
+page (or hold BOOT for 5 seconds to start over).
+
+The values a freshly flashed board starts with are build options in `sdkconfig.openmanet`:
+channel 28 (916 MHz, 8 MHz wide), primary width and index on auto (2 MHz at index 3), 1000 TU
+beacons, an 8 dBm cap. `idf.py menuconfig` under "openmanet-32" also has:
+- the default hotspot channel (6) and the hotspot address (192.168.4.1);
 - the default root password;
 - the reset button and LED pins;
 - the bat0 subnet. The board takes `10.41.250.<last byte of its batman address>` on a /16.
 
-The country code is set by `CONFIG_HALOW_COUNTRY_CODE` (US) in `sdkconfig.defaults`. Use the
+The country code stays a build setting: `CONFIG_HALOW_COUNTRY_CODE` (US) in
+`sdkconfig.defaults`. It decides which channels and power levels the page offers. Use the
 one for where you operate.
 
 ## Notes for anyone reading the code
@@ -151,6 +167,9 @@ things the standards don't tell you. They are all documented in the comments of
 - Relaying traffic *through* this board between two nodes that can't hear each other is not
   tested yet. So far every node has been in range of every other.
 - Peering Close frames are accepted without authentication (see above).
+- If the board restarts within a minute of peering, an OpenMANET node can ignore its new
+  handshake for several minutes (seen once, both nodes at the same time; the log shows
+  `SAE with ... failed: no answer`). Restarting the board again cleared it.
 - No group management key (IGTK) is sent, and broadcast integrity (BIP) is not checked.
 - The board pings every batman-adv node it learns about at `10.41.250.<last byte>` and logs
   the result. That only works for other openmanet-32 boards, so the log shows failed pings

@@ -38,6 +38,7 @@
 #include "batadv.h"
 #include "hotspot.h"
 #include "mesh.h"
+#include "radio.h"
 #include "settings.h"
 
 static const char *TAG = "hop";
@@ -293,12 +294,22 @@ static void bringup_task(void *arg)
     struct mesh_config mc = { 0 };
     strlcpy(mc.mesh_id, s_settings.mesh_id, sizeof(mc.mesh_id));
     strlcpy(mc.password, s_settings.mesh_password, sizeof(mc.password));
-    mc.s1g_chan = CONFIG_HOP_S1G_CHANNEL;
-    mc.opclass = CONFIG_HOP_S1G_OPCLASS;
-    mc.pri_bw_mhz = CONFIG_HOP_PRI_BW_MHZ;
-    mc.pri_1mhz_chan_idx = CONFIG_HOP_PRI_1MHZ_IDX;
-    mc.beacon_tus = CONFIG_HOP_BEACON_TUS;
-    mc.tx_dbm = CONFIG_HOP_TX_DBM;
+    /* The radio as saved on the page (or the build's defaults): the channel's operating class
+     * comes from the country's table, and auto primary settings are worked out the way
+     * OpenMANET does it (radio.c). */
+    const struct hop_radio *r = &s_settings.radio;
+    const struct mmwlan_s1g_channel *ch = radio_find(r->s1g_chan);
+    mc.s1g_chan = r->s1g_chan;
+    mc.opclass = ch != NULL ? (uint8_t)ch->global_operating_class : 0;
+    radio_resolve(r, &mc.pri_bw_mhz, &mc.pri_1mhz_chan_idx);
+    mc.beacon_tus = r->beacon_tus;
+    mc.tx_dbm = r->tx_dbm;
+    char tx[24];
+    snprintf(tx, sizeof(tx), mc.tx_dbm ? "TX cap %u dBm" : "TX uncapped", mc.tx_dbm);
+    ESP_LOGI(TAG, "HaLow channel %u (%lu.%lu MHz, %u MHz wide, op class %u), primary %u MHz index %u, beacons %u TU, %s",
+             mc.s1g_chan, ch ? (unsigned long)(ch->centre_freq_hz / 1000000) : 0UL,
+             ch ? (unsigned long)(ch->centre_freq_hz / 100000 % 10) : 0UL, ch ? ch->bw_mhz : 0, mc.opclass,
+             mc.pri_bw_mhz, mc.pri_1mhz_chan_idx, mc.beacon_tus, tx);
     mc.ttl = 1;
     mc.require_peering = true;
     mc.l2_mode = true;
