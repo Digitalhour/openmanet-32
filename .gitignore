@@ -1,0 +1,14 @@
+# ESP-IDF build output and fetched components
+build/
+build-*/
+managed_components/
+sdkconfig
+sdkconfig.old
+
+# Local config files that may hold passwords (never commit)
+sdkconfig.*secret*
+sdkconfig.local
+
+# Editors and OS
+.vscode/
+.DS_Store

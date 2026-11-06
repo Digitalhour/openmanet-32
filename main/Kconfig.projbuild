@@ -1,4 +1,4 @@
-menu "hopnode"
+menu "openmanet-32"
 
     config HOP_MESH_ID
         string "Mesh name suggested on the setup page (empty: none)"

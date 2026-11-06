@@ -1,4 +1,4 @@
-# hopnode: a cheap, disposable HaLow relay for a batman-adv mesh. Target-independent defaults.
+# openmanet-32: an ESP32-S3 + Wi-Fi HaLow meshpoint for OpenMANET. Target-independent defaults.
 
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
@@ -19,13 +19,13 @@ CONFIG_LWIP_L2_TO_L3_COPY=y
 CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=32
 CONFIG_LWIP_IRAM_OPTIMIZATION=y
 
-# Message store lives in the XIAO ESP32S3's 8 MB octal PSRAM.
+# The XIAO ESP32S3's 8 MB octal PSRAM.
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_MODE_OCT=y
 CONFIG_SPIRAM_TYPE_AUTO=y
 CONFIG_SPIRAM_SPEED_80M=y
 
-# Bigger TCP windows: photos between boards went from about 500 to about 900 kbit/s on a
+# Bigger TCP windows: in the HalowChat tests, photos between boards went from about 500 to about 900 kbit/s on a
 # 2 MHz channel with these, against ESP-IDF's 5.7 KB default.
 CONFIG_LWIP_TCP_SND_BUF_DEFAULT=32768
 CONFIG_LWIP_TCP_WND_DEFAULT=32768

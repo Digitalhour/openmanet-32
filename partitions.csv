@@ -1,4 +1,4 @@
-# HalowChat: a bigger NVS partition for the saved chat history.
+# openmanet-32: room in NVS for the saved settings; the app gets 3 MB.
 # Name,   Type, SubType, Offset,  Size, Flags
 nvs,      data, nvs,     0x9000,  64K,
 phy_init, data, phy,     0x19000, 4K,
