@@ -12,9 +12,10 @@
  *
  * Nothing about the network is built in. A freshly flashed board is in setup mode: the HaLow
  * radio stays off, the hotspot is open and named ...-Setup, the LED blinks, and the setup
- * page pops up on whatever joins it. Once the owner has chosen the mesh and the hotspot
- * password there, the board restarts and joins the mesh. Holding BOOT for 5 seconds erases
- * the settings and goes back to setup mode.
+ * page pops up on whatever joins it. The page asks for user root and the default password
+ * (auth.c); once the owner has chosen a new root password, the mesh and the hotspot password
+ * there, the board restarts and joins the mesh. Holding BOOT for 5 seconds erases the
+ * settings, root password included, and goes back to setup mode.
  */
 
 #include <stdio.h>

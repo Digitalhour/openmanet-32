@@ -95,13 +95,22 @@ menu "hopnode"
         string "Hotspot address (a /24; the settings page lives here)"
         default "192.168.4.1"
 
+    config HOP_ROOT_DEFAULT_PASSWORD
+        string "Default root password (signs in to setup only)"
+        default "openmanet"
+        help
+            The hotspot page asks for user root and a password. Until setup is finished
+            this default signs in; setup makes the owner choose a new one, which replaces
+            it. Erasing the settings (BOOT held 5 s) brings the default back.
+
     config HOP_RESET_GPIO
         int "Button that erases the settings when held 5 s (-1: none)"
         range -1 48
         default 0
         help
             The XIAO ESP32S3's BOOT button is GPIO 0. Holding it for 5 seconds while the
-            node runs erases the settings and restarts into setup mode. (Held while
+            node runs erases the settings (root password included) and restarts into
+            setup mode. (Held while
             powering on, it still enters the ROM download mode as usual.)
 
     config HOP_LED_GPIO

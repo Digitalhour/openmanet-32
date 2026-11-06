@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: 0BSD OR GPL-3.0-or-later */
 #include "hotspot.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -17,6 +18,7 @@
 #include "lwip/sockets.h"
 #include "sdkconfig.h"
 
+#include "auth.h"
 #include "batadv.h"
 #include "captive_dns.h"
 #include "mesh.h"
@@ -101,6 +103,8 @@ void hotspot_prepare(const struct hop_settings *running)
 {
     s_running = *running;
     s_setup = !running->configured;
+    /* Setup mode signs in with the default root password, after that only the chosen one. */
+    auth_init(s_setup ? NULL : running->root_hash);
     if (s_setup)
     {
         /* An open network, so the first person can get in, named so nobody mistakes it for
@@ -156,15 +160,14 @@ void hotspot_prepare(const struct hop_settings *running)
 
 /* ---------- The page ---------- */
 
-/* Changes are taken only from hotspot clients. The mesh can see the status, but anyone on
- * the mesh (including other nodes' hotspot users) is not trusted to change this node. */
-static bool from_hotspot(httpd_req_t *req)
+/* The client's IPv4 address (network order), or 0. */
+static uint32_t peer_ip(httpd_req_t *req)
 {
     struct sockaddr_storage ss;
     socklen_t len = sizeof(ss);
     if (getpeername(httpd_req_to_sockfd(req), (struct sockaddr *)&ss, &len) != 0)
     {
-        return false;
+        return 0;
     }
     uint32_t addr = 0;
     if (ss.ss_family == AF_INET)
@@ -179,10 +182,19 @@ static bool from_hotspot(httpd_req_t *req)
         static const uint8_t mapped[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff };
         if (memcmp(b, mapped, 12) != 0)
         {
-            return false;
+            return 0;
         }
         memcpy(&addr, b + 12, 4);
     }
+    return addr;
+}
+
+/* Changes are taken only from hotspot clients. Over the mesh, root can sign in and see the
+ * status, but anyone on the mesh (including other nodes' hotspot users) is not trusted to
+ * change this node. */
+static bool from_hotspot(httpd_req_t *req)
+{
+    uint32_t addr = peer_ip(req);
     esp_netif_ip_info_t ap;
     if (addr == 0 || esp_netif_get_ip_info(s_ap_netif, &ap) != ESP_OK)
     {
@@ -220,6 +232,73 @@ static esp_err_t send_result(httpd_req_t *req, const char *status, bool ok, cons
     return send_json(req, root);
 }
 
+/* ---------- Sign-in ---------- */
+
+#define COOKIE "sid"
+
+/* The session token from the Cookie header. Not httpd_req_get_cookie_val: on some requests
+ * (seen with a POST whose next header has no space after its colon) ESP-IDF 5.4's parser
+ * leaves the Cookie value unterminated, so it runs on into the next header line and the
+ * value comes back too long. Here the token is the AUTH_TOKEN_LEN hex characters after
+ * "sid=", whatever follows them. */
+static bool cookie_token(httpd_req_t *req, char token[AUTH_TOKEN_LEN + 1])
+{
+    char raw[256];
+    esp_err_t err = httpd_req_get_hdr_value_str(req, "Cookie", raw, sizeof(raw));
+    if (err != ESP_OK && err != ESP_ERR_HTTPD_RESULT_TRUNC)
+    {
+        return false;
+    }
+    bool found = false;
+    for (const char *p = raw; !found && (p = strstr(p, COOKIE "=")) != NULL; p++)
+    {
+        if (p != raw && p[-1] != ' ' && p[-1] != ';')
+        {
+            continue;   /* the end of some other cookie's name */
+        }
+        const char *v = p + strlen(COOKIE "=");
+        size_t n = 0;
+        while (n <= AUTH_TOKEN_LEN && isxdigit((unsigned char)v[n]))
+        {
+            n++;
+        }
+        if (n == AUTH_TOKEN_LEN)
+        {
+            memcpy(token, v, AUTH_TOKEN_LEN);
+            token[AUTH_TOKEN_LEN] = '\0';
+            found = true;
+        }
+    }
+    memset(raw, 0, sizeof(raw));
+    return found;
+}
+
+static bool signed_in(httpd_req_t *req)
+{
+    char token[AUTH_TOKEN_LEN + 1];
+    bool ok = cookie_token(req, token) && auth_session_valid(token);
+    memset(token, 0, sizeof(token));
+    return ok;
+}
+
+/* Every API call but sign-in answers this until the browser has signed in; the pages then
+ * show their sign-in form. */
+static esp_err_t need_login(httpd_req_t *req)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "ok", false);
+    cJSON_AddBoolToObject(root, "login", true);
+    cJSON_AddStringToObject(root, "message", "Sign in first");
+    httpd_resp_set_status(req, "401 Unauthorized");
+    return send_json(req, root);
+}
+
+static void log_peer(const char *what, httpd_req_t *req)
+{
+    uint32_t a = peer_ip(req);
+    ESP_LOGI(TAG, "%s from " IPSTR, what, IP2STR((esp_ip4_addr_t *)&a));
+}
+
 static esp_err_t page_get(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "text/html");
@@ -245,6 +324,10 @@ static esp_err_t redirect_to_setup(httpd_req_t *req, httpd_err_code_t err)
 
 static esp_err_t status_get(httpd_req_t *req)
 {
+    if (!signed_in(req))
+    {
+        return need_login(req);
+    }
     cJSON *root = cJSON_CreateObject();
     cJSON_AddBoolToObject(root, "can_edit", from_hotspot(req));
     cJSON_AddBoolToObject(root, "setup", s_setup);
@@ -356,11 +439,15 @@ static bool take(const cJSON *root, const char *key, char *out, size_t size, boo
 
 static esp_err_t settings_post(httpd_req_t *req)
 {
+    if (!signed_in(req))
+    {
+        return need_login(req);
+    }
     if (!from_hotspot(req))
     {
         return send_result(req, "403 Forbidden", false, "Settings can only be changed from this meshpoint's hotspot");
     }
-    char body[512];
+    char body[768];
     if (read_body(req, body, sizeof(body)) < 0)
     {
         return send_result(req, "400 Bad Request", false, "Request too long or empty");
@@ -381,16 +468,36 @@ static esp_err_t settings_post(httpd_req_t *req)
     fits &= take(root, "ap_ssid", next.ap_ssid, sizeof(next.ap_ssid), false);
     fits &= take(root, "ap_password", next.ap_password, sizeof(next.ap_password), true);
     bool open_mesh = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(root, "mesh_open"));
+    /* Setup replaces the default root password; later changes go through /api/password. */
+    char root_pw[64] = "";
+    if (s_setup)
+    {
+        fits &= take(root, "root_password", root_pw, sizeof(root_pw), false);
+    }
     cJSON_Delete(root);
 
     const char *why = fits ? NULL : "A value is too long";
+    if (fits && s_setup && !auth_password_acceptable(root_pw, &why))
+    {
+        fits = false;
+    }
     if (fits && s_setup && next.mesh_password[0] == '\0' && !open_mesh)
     {
         /* In setup there is no current password to keep: blank means the person forgot. */
         fits = false;
         why = "Enter the mesh password, or tick Open network";
     }
-    if (!fits || !settings_valid(&next, &why))
+    if (fits && !settings_valid(&next, &why))
+    {
+        fits = false;
+    }
+    if (fits && s_setup && !auth_hash(root_pw, next.root_hash))
+    {
+        fits = false;
+        why = "Could not hash the root password";
+    }
+    memset(root_pw, 0, sizeof(root_pw));
+    if (!fits)
     {
         memset(&next, 0, sizeof(next));
         return send_result(req, "400 Bad Request", false, why);
@@ -408,6 +515,10 @@ static esp_err_t settings_post(httpd_req_t *req)
 
 static esp_err_t reset_post(httpd_req_t *req)
 {
+    if (!signed_in(req))
+    {
+        return need_login(req);
+    }
     if (!from_hotspot(req))
     {
         return send_result(req, "403 Forbidden", false, "Settings can only be changed from this meshpoint's hotspot");
@@ -421,12 +532,138 @@ static esp_err_t reset_post(httpd_req_t *req)
     return ESP_OK;
 }
 
+/* Reads the named string fields of a small JSON body into the given buffers. False if the
+ * body is not JSON or a field is too long. */
+static bool read_fields(httpd_req_t *req, const char *const *keys, char *const *outs, size_t size, int n)
+{
+    char body[384];
+    if (read_body(req, body, sizeof(body)) < 0)
+    {
+        return false;
+    }
+    cJSON *root = cJSON_Parse(body);
+    memset(body, 0, sizeof(body));
+    if (root == NULL)
+    {
+        return false;
+    }
+    bool fits = true;
+    for (int i = 0; i < n; i++)
+    {
+        outs[i][0] = '\0';
+        fits &= take(root, keys[i], outs[i], size, false);
+    }
+    cJSON_Delete(root);
+    return fits;
+}
+
+static esp_err_t login_post(httpd_req_t *req)
+{
+    char user[64], pw[64];
+    const char *const keys[] = { "username", "password" };
+    char *const outs[] = { user, pw };
+    if (!read_fields(req, keys, outs, sizeof(user), 2))
+    {
+        memset(pw, 0, sizeof(pw));
+        return send_result(req, "400 Bad Request", false, "Bad request");
+    }
+    int wait_s = 0;
+    enum auth_result r = auth_check(user, pw, &wait_s);
+    memset(pw, 0, sizeof(pw));
+    if (r == AUTH_LOCKED)
+    {
+        char msg[64];
+        snprintf(msg, sizeof(msg), "Too many wrong tries. Wait %d seconds.", wait_s);
+        return send_result(req, "429 Too Many Requests", false, msg);
+    }
+    if (r != AUTH_OK)
+    {
+        log_peer("Wrong sign-in", req);
+        return send_result(req, "401 Unauthorized", false, "Wrong user name or password");
+    }
+    char token[AUTH_TOKEN_LEN + 1];
+    auth_session_open(token);
+    char cookie[AUTH_TOKEN_LEN + 48];
+    snprintf(cookie, sizeof(cookie), COOKIE "=%s; Path=/; HttpOnly; SameSite=Strict", token);
+    memset(token, 0, sizeof(token));
+    httpd_resp_set_hdr(req, "Set-Cookie", cookie);
+    log_peer("Signed in", req);
+    esp_err_t err = send_result(req, "200 OK", true, "Signed in");
+    memset(cookie, 0, sizeof(cookie));
+    return err;
+}
+
+static esp_err_t logout_post(httpd_req_t *req)
+{
+    char token[AUTH_TOKEN_LEN + 1];
+    if (cookie_token(req, token))
+    {
+        auth_session_close(token);
+    }
+    memset(token, 0, sizeof(token));
+    httpd_resp_set_hdr(req, "Set-Cookie", COOKIE "=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict");
+    return send_result(req, "200 OK", true, "Signed out");
+}
+
+/* After setup: root changes its own password. The current one is asked again, so a page
+ * left signed in is not enough to take the board over. Every session ends. */
+static esp_err_t password_post(httpd_req_t *req)
+{
+    if (!signed_in(req))
+    {
+        return need_login(req);
+    }
+    if (s_setup)
+    {
+        return send_result(req, "400 Bad Request", false, "Finish setup first");
+    }
+    if (!from_hotspot(req))
+    {
+        return send_result(req, "403 Forbidden", false, "Settings can only be changed from this meshpoint's hotspot");
+    }
+    char cur[64], pw[64];
+    const char *const keys[] = { "current", "password" };
+    char *const outs[] = { cur, pw };
+    bool fits = read_fields(req, keys, outs, sizeof(cur), 2);
+    const char *why = "Bad request";
+    int wait_s = 0;
+    enum auth_result r = fits ? auth_check(AUTH_USER, cur, &wait_s) : AUTH_WRONG;
+    memset(cur, 0, sizeof(cur));
+    if (!fits || r != AUTH_OK || !auth_password_acceptable(pw, &why))
+    {
+        memset(pw, 0, sizeof(pw));
+        if (fits && r == AUTH_LOCKED)
+        {
+            return send_result(req, "429 Too Many Requests", false, "Too many wrong tries. Wait and try again.");
+        }
+        if (fits && r != AUTH_OK)
+        {
+            return send_result(req, "403 Forbidden", false, "The current password is wrong");
+        }
+        return send_result(req, "400 Bad Request", false, why);
+    }
+    uint8_t hash[SETTINGS_ROOT_HASH_LEN];
+    bool hashed = auth_hash(pw, hash);
+    memset(pw, 0, sizeof(pw));
+    if (!hashed || settings_save_root_hash(hash) != ESP_OK)
+    {
+        return send_result(req, "500 Internal Server Error", false, "Could not save the new password");
+    }
+    memcpy(s_running.root_hash, hash, sizeof(hash));
+    auth_set_hash(hash);
+    auth_session_close_all();
+    httpd_resp_set_hdr(req, "Set-Cookie", COOKIE "=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict");
+    log_peer("Root password changed", req);
+    return send_result(req, "200 OK", true, "Password changed. Sign in with the new one.");
+}
+
 static void web_start(void)
 {
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.stack_size = 8192;
     cfg.lru_purge_enable = true;
     cfg.max_open_sockets = 5;
+    cfg.max_uri_handlers = 10;
     httpd_handle_t server = NULL;
     if (httpd_start(&server, &cfg) != ESP_OK)
     {
@@ -438,6 +675,9 @@ static void web_start(void)
         { .uri = "/api/status", .method = HTTP_GET, .handler = status_get },
         { .uri = "/api/settings", .method = HTTP_POST, .handler = settings_post },
         { .uri = "/api/reset", .method = HTTP_POST, .handler = reset_post },
+        { .uri = "/api/login", .method = HTTP_POST, .handler = login_post },
+        { .uri = "/api/logout", .method = HTTP_POST, .handler = logout_post },
+        { .uri = "/api/password", .method = HTTP_POST, .handler = password_post },
     };
     for (size_t i = 0; i < sizeof(routes) / sizeof(routes[0]); i++)
     {

@@ -38,3 +38,6 @@ CONFIG_LWIP_IP_REASS_MAX_PBUFS=20
 # Hotspot clients reach the mesh through NAT on bat0 (hotspot.c).
 CONFIG_LWIP_IP_FORWARD=y
 CONFIG_LWIP_IPV4_NAPT=y
+
+# Phone browsers send long headers, and the page's sign-in cookie adds to them (hotspot.c).
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024

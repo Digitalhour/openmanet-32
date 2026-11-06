@@ -46,14 +46,37 @@
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; width: 100%; margin-top: 4px; }
   button.link { border: 0; background: none; color: var(--accent); padding: 0 4px; font-size: 14px; }
   button:disabled { opacity: .5; cursor: default; }
-  #msg { min-height: 1.4em; margin: 10px 0 0; font-size: 14px; }
+  #msg, #l_msg, #p_msg { min-height: 1.4em; margin: 10px 0 0; font-size: 14px; }
+  .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
   .notice { font-size: 14px; color: var(--warn); margin: 0 0 14px; }
   .actions { display: flex; justify-content: center; margin-top: 4px; }
 </style>
 </head>
 <body>
 <main>
-  <h1 id="title">Meshpoint</h1>
+  <form id="login" hidden novalidate>
+    <h1>Meshpoint</h1>
+    <p class="sub">Sign in as root with the password chosen at setup.</p>
+    <section>
+      <label for="l_user">User name</label>
+      <input type="text" id="l_user" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <label for="l_pass">Password</label>
+      <div class="row">
+        <input type="password" id="l_pass" autocomplete="current-password" autocapitalize="off" autocorrect="off">
+        <button type="button" class="link" data-show="l_pass">Show</button>
+      </div>
+    </section>
+    <button type="submit" class="primary" id="l_go">Sign in</button>
+    <p id="l_msg" role="alert"></p>
+    <p class="hint">Forgot it? Hold the meshpoint's BOOT button for 5 seconds to erase all settings
+      and set it up again.</p>
+  </form>
+
+  <div id="app" hidden>
+  <div class="top">
+    <h1 id="title">Meshpoint</h1>
+    <button type="button" class="link" id="logout">Sign out</button>
+  </div>
   <p class="sub" id="sub">Loading&hellip;</p>
 
   <section>
@@ -100,8 +123,28 @@
 
     <button type="submit" class="primary" id="save">Save and restart</button>
     <p id="msg"></p>
-    <div class="actions"><button type="button" class="link" id="reset">Erase settings and set up again</button></div>
   </form>
+
+  <form id="pf" autocomplete="off" novalidate>
+    <section>
+      <h2>Root password</h2>
+      <label for="p_cur">Current password</label>
+      <input type="password" id="p_cur" maxlength="63" autocomplete="current-password">
+      <label for="p_new">New password (8 or more characters)</label>
+      <div class="row">
+        <input type="password" id="p_new" maxlength="63" autocomplete="new-password">
+        <button type="button" class="link" data-show="p_new">Show</button>
+      </div>
+      <label for="p_new2">New password again</label>
+      <input type="password" id="p_new2" maxlength="63" autocomplete="new-password">
+      <p class="hint">Takes effect at once, no restart. You sign in again with the new one.</p>
+    </section>
+    <button type="submit" class="primary" id="p_go">Change root password</button>
+    <p id="p_msg"></p>
+  </form>
+
+  <div class="actions"><button type="button" class="link" id="reset">Erase settings and set up again</button></div>
+  </div>
 </main>
 
 <script>
@@ -109,8 +152,17 @@ const $ = (id) => document.getElementById(id);
 let filled = false, canEdit = false, busy = false;
 
 function applyLock() {
-  for (const el of $("f").querySelectorAll("input, button")) el.disabled = !canEdit || busy;
+  for (const el of document.querySelectorAll("#f input, #f button, #pf input, #pf button, #reset")) el.disabled = !canEdit || busy;
   $("mesh_password").disabled = !canEdit || busy || $("mesh_open").checked;
+}
+
+function showLogin(text, cls) {
+  $("app").hidden = true;
+  $("login").hidden = false;
+  $("l_msg").textContent = text || "";
+  $("l_msg").className = cls || "";
+  filled = false;
+  $("l_user").focus();
 }
 
 function upFor(s) {
@@ -121,9 +173,14 @@ function upFor(s) {
 function say(text, cls) { const m = $("msg"); m.textContent = text; m.className = cls || ""; }
 
 async function refresh() {
-  let st;
-  try { st = await (await fetch("/api/status", { cache: "no-store" })).json(); }
-  catch (e) { $("sub").textContent = "Not reachable. Is this device still on the hotspot?"; return; }
+  if (!$("login").hidden || busy) return;
+  let st, r;
+  try {
+    r = await fetch("/api/status", { cache: "no-store" });
+    if (r.status === 401) { showLogin($("app").hidden ? "" : "Signed out. Sign in again."); return; }
+    st = await r.json();
+  } catch (e) { $("sub").textContent = "Not reachable. Is this device still on the hotspot?"; return; }
+  $("app").hidden = false;
 
   canEdit = st.can_edit;
   $("title").textContent = st.ap_ssid;
@@ -179,7 +236,14 @@ async function post(url, body) {
   const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
   let j = {};
   try { j = await r.json(); } catch (e) {}
-  return { ok: r.ok && j.ok, message: j.message || ("Error " + r.status) };
+  return { ok: r.ok && j.ok, status: r.status, login: !!j.login, message: j.message || ("Error " + r.status) };
+}
+
+function relogin(r) {
+  if (!r.login) return false;
+  busy = false; applyLock();
+  showLogin("Signed out. Sign in again.");
+  return true;
 }
 
 function waitForRestart() {
@@ -201,6 +265,7 @@ $("f").addEventListener("submit", async (e) => {
       ap_ssid: $("ap_ssid").value.trim(), ap_password: ap,
     });
     $("mesh_password").value = ""; $("ap_password").value = "";
+    if (relogin(r)) return;
     if (r.ok) waitForRestart(); else { say(r.message, "bad"); busy = false; applyLock(); }
   } catch (err) { say("Could not reach the meshpoint.", "bad"); busy = false; applyLock(); }
 });
@@ -209,7 +274,47 @@ $("reset").addEventListener("click", async () => {
   if (!confirm("Erase all settings? The meshpoint leaves the mesh and restarts with an open setup hotspot, " + $("title").textContent + "-Setup, where it waits to be set up again.")) return;
   busy = true; applyLock();
   const r = await post("/api/reset");
+  if (relogin(r)) return;
   if (r.ok) waitForRestart(); else { say(r.message, "bad"); busy = false; applyLock(); }
+});
+
+function psay(text, cls) { const m = $("p_msg"); m.textContent = text; m.className = cls || ""; }
+
+$("pf").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const cur = $("p_cur").value, nw = $("p_new").value, nw2 = $("p_new2").value;
+  if (!cur) return psay("Enter the current password.", "bad");
+  if (nw.length < 8 || nw.length > 63) return psay("The new password needs 8 to 63 characters.", "bad");
+  if (nw !== nw2) return psay("The two new passwords are different.", "bad");
+  busy = true; applyLock();
+  psay("Saving…");
+  let r;
+  try { r = await post("/api/password", { current: cur, password: nw }); }
+  catch (err) { r = { ok: false, message: "Could not reach the meshpoint." }; }
+  for (const k of ["p_cur", "p_new", "p_new2"]) $(k).value = "";
+  busy = false; applyLock();
+  if (relogin(r)) return;
+  if (r.ok) { psay(""); showLogin(r.message, "ok"); } else psay(r.message, "bad");
+});
+
+$("login").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("l_go").disabled = true;
+  $("l_msg").textContent = "Signing in…"; $("l_msg").className = "";
+  let r;
+  try { r = await post("/api/login", { username: $("l_user").value.trim(), password: $("l_pass").value }); }
+  catch (err) { r = { ok: false, message: "Could not reach the meshpoint. Is this device on its hotspot?" }; }
+  $("l_pass").value = "";
+  $("l_go").disabled = false;
+  if (!r.ok) { $("l_msg").textContent = r.message; $("l_msg").className = "bad"; return; }
+  $("l_msg").textContent = "";
+  $("login").hidden = true;
+  refresh();
+});
+
+$("logout").addEventListener("click", async () => {
+  try { await post("/api/logout"); } catch (err) {}
+  showLogin("Signed out.");
 });
 
 refresh();

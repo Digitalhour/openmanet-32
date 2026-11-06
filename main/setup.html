@@ -39,7 +39,7 @@
   button.primary { background: var(--accent); color: #fff; width: 100%; }
   button.link { background: none; color: var(--accent); padding: 0 4px; font-size: 14px; }
   button:disabled { opacity: .5; cursor: default; }
-  #msg { min-height: 1.4em; margin: 10px 0 0; font-size: 14px; color: var(--bad); }
+  #msg, #l_msg { min-height: 1.4em; margin: 10px 0 0; font-size: 14px; color: var(--bad); }
   .done h2 { color: var(--ok); }
   .done ol { padding-left: 20px; margin: 8px 0 0; }
   .done li { margin: 6px 0; }
@@ -48,13 +48,43 @@
 </head>
 <body>
 <main>
-  <form id="f" autocomplete="off" novalidate>
+  <form id="login" hidden novalidate>
+    <h1>Sign in to set up</h1>
+    <p class="sub">This meshpoint has not been set up yet. Sign in with the default user name and
+      password from its instructions.</p>
+    <section>
+      <label for="l_user">User name</label>
+      <input type="text" id="l_user" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <label for="l_pass">Password</label>
+      <div class="row">
+        <input type="password" id="l_pass" autocomplete="current-password" autocapitalize="off" autocorrect="off">
+        <button type="button" class="link" data-show="l_pass">Show</button>
+      </div>
+    </section>
+    <button type="submit" class="primary" id="l_go">Sign in</button>
+    <p id="l_msg" role="alert"></p>
+  </form>
+
+  <form id="f" hidden autocomplete="off" novalidate>
     <h1>Set up your meshpoint</h1>
-    <p class="sub">This meshpoint has not been set up yet. Tell it which OpenMANET network to join and
+    <p class="sub">Choose a new root password, tell the meshpoint which OpenMANET network to join, and
       choose the Wi-Fi hotspot it will offer. It stays on this setup network until you finish.</p>
 
     <section>
-      <h2><span class="num">1</span>Your OpenMANET network</h2>
+      <h2><span class="num">1</span>New root password</h2>
+      <p class="hint">Replaces the default password. From now on you sign in to this page as root
+        with it.</p>
+      <label for="root_password">New root password (8 or more characters)</label>
+      <div class="row">
+        <input type="password" id="root_password" maxlength="63" autocomplete="new-password" autocapitalize="off" autocorrect="off">
+        <button type="button" class="link" data-show="root_password">Show</button>
+      </div>
+      <label for="root_password2">New root password again</label>
+      <input type="password" id="root_password2" maxlength="63" autocomplete="new-password" autocapitalize="off" autocorrect="off">
+    </section>
+
+    <section>
+      <h2><span class="num">2</span>Your OpenMANET network</h2>
       <p class="hint">Use the same mesh name and password as your OpenMANET nodes (in LuCI, the
         HaLow mesh interface's Mesh ID and key).</p>
       <label for="mesh_id">Mesh name</label>
@@ -68,7 +98,7 @@
     </section>
 
     <section>
-      <h2><span class="num">2</span>This meshpoint's hotspot</h2>
+      <h2><span class="num">3</span>This meshpoint's hotspot</h2>
       <p class="hint">Phones and laptops join this to reach the mesh and this page.</p>
       <label for="ap_ssid">Hotspot name</label>
       <input type="text" id="ap_ssid" maxlength="32" autocapitalize="off" autocorrect="off" spellcheck="false">
@@ -92,9 +122,11 @@
     <ol>
       <li>Wait about 20 seconds.</li>
       <li>Join the Wi-Fi network <span class="mono" id="d-ssid"></span> with the password you chose.</li>
-      <li>Open <span class="mono">http://192.168.4.1</span> to see the mesh and change settings.</li>
+      <li>Open <span class="mono">http://192.168.4.1</span> and sign in as root with your new password
+        to see the mesh and change settings.</li>
     </ol>
-    <p class="hint">Locked out? Hold the BOOT button for 5 seconds to erase the settings and start setup again.</p>
+    <p class="hint">Locked out? Hold the BOOT button for 5 seconds to erase the settings, root password
+      included, and start setup again.</p>
   </section>
 </main>
 
@@ -110,8 +142,11 @@ function bad(id, text) {
 
 function check() {
   for (const i of document.querySelectorAll("input")) i.removeAttribute("aria-invalid");
+  const rp = $("root_password").value, rp2 = $("root_password2").value;
   const id = $("mesh_id").value.trim(), mp = $("mesh_password").value, open = $("mesh_open").checked;
   const ss = $("ap_ssid").value.trim(), ap = $("ap_password").value, ap2 = $("ap_password2").value;
+  if (rp.length < 8 || rp.length > 63) return bad("root_password", "The root password needs 8 to 63 characters.");
+  if (rp !== rp2) return bad("root_password2", "The two root passwords are different.");
   if (!id) return bad("mesh_id", "Enter the mesh name.");
   if (!open && !mp) return bad("mesh_password", "Enter the mesh password, or tick “This mesh has no password”.");
   if (!open && (mp.length < 8 || mp.length > 63)) return bad("mesh_password", "The mesh password is 8 to 63 characters.");
@@ -128,6 +163,7 @@ for (const b of document.querySelectorAll("[data-show]")) {
     i.type = i.type === "password" ? "text" : "password";
     b.textContent = i.type === "password" ? "Show" : "Hide";
     if (b.dataset.show === "ap_password") $("ap_password2").type = i.type;
+    if (b.dataset.show === "root_password") $("root_password2").type = i.type;
   });
 }
 
@@ -142,6 +178,7 @@ $("f").addEventListener("submit", async (e) => {
   $("go").disabled = true;
   $("msg").textContent = "";
   const body = {
+    root_password: $("root_password").value,
     mesh_id: $("mesh_id").value.trim(), mesh_password: $("mesh_password").value, mesh_open: $("mesh_open").checked,
     ap_ssid: $("ap_ssid").value.trim(), ap_password: $("ap_password").value,
   };
@@ -149,7 +186,9 @@ $("f").addEventListener("submit", async (e) => {
     const r = await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     let j = {};
     try { j = await r.json(); } catch (err) {}
-    if (r.ok && j.ok) {
+    if (r.status === 401) {
+      showLogin("Your sign-in ran out. Sign in again; nothing was saved.");
+    } else if (r.ok && j.ok) {
       $("d-mesh").textContent = body.mesh_id;
       $("d-ssid").textContent = body.ap_ssid;
       $("f").hidden = true;
@@ -163,16 +202,50 @@ $("f").addEventListener("submit", async (e) => {
     $("msg").textContent = "Could not reach the meshpoint. Are you still on its setup network?";
     $("go").disabled = false;
   }
-  for (const k of ["mesh_password", "ap_password", "ap_password2"]) $(k).value = "";
+  for (const k of ["root_password", "root_password2", "mesh_password", "ap_password", "ap_password2"]) $(k).value = "";
 });
 
-(async () => {
+function showLogin(text) {
+  $("f").hidden = true;
+  $("login").hidden = false;
+  $("l_msg").textContent = text || "";
+  $("go").disabled = false;
+  $("l_user").focus();
+}
+
+$("login").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("l_go").disabled = true;
+  $("l_msg").textContent = "Signing in…";
   try {
-    const st = await (await fetch("/api/status", { cache: "no-store" })).json();
-    $("mesh_id").value = st.mesh_id || "";
-    $("ap_ssid").value = st.ap_ssid || "";
-  } catch (e) {}
-})();
+    const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: $("l_user").value.trim(), password: $("l_pass").value }) });
+    let j = {};
+    try { j = await r.json(); } catch (err) {}
+    $("l_pass").value = "";
+    if (r.ok && j.ok) { $("l_msg").textContent = ""; await start(); }
+    else $("l_msg").textContent = j.message || ("Error " + r.status);
+  } catch (err) {
+    $("l_msg").textContent = "Could not reach the meshpoint. Are you still on its setup network?";
+  }
+  $("l_go").disabled = false;
+});
+
+async function start() {
+  let r;
+  try { r = await fetch("/api/status", { cache: "no-store" }); }
+  catch (e) { showLogin("Could not reach the meshpoint. Are you still on its setup network?"); return; }
+  if (r.status === 401) { showLogin(); return; }
+  let st = {};
+  try { st = await r.json(); } catch (e) {}
+  $("mesh_id").value = $("mesh_id").value || st.mesh_id || "";
+  $("ap_ssid").value = $("ap_ssid").value || st.ap_ssid || "";
+  $("login").hidden = true;
+  $("f").hidden = false;
+  $("root_password").focus();
+}
+
+start();
 </script>
 </body>
 </html>

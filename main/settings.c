@@ -46,13 +46,16 @@ void settings_load(struct hop_settings *s)
     nvs_handle_t h;
     if (nvs_open(NS, NVS_READONLY, &h) == ESP_OK)
     {
-        /* Configured only if all four are there: settings_save writes all four, and
-         * settings_erase leaves the namespace itself behind, empty. */
+        /* Configured only if all five are there: settings_save writes all five, and
+         * settings_erase leaves the namespace itself behind, empty. A board saved before the
+         * root password existed has four, so it goes back to setup to choose one. */
         struct hop_settings got = *s;
         bool all = get_str(h, "mesh_id", got.mesh_id, sizeof(got.mesh_id));
         all &= get_str(h, "mesh_pw", got.mesh_password, sizeof(got.mesh_password));
         all &= get_str(h, "ap_ssid", got.ap_ssid, sizeof(got.ap_ssid));
         all &= get_str(h, "ap_pw", got.ap_password, sizeof(got.ap_password));
+        size_t hl = sizeof(got.root_hash);
+        all &= nvs_get_blob(h, "root_pw", got.root_hash, &hl) == ESP_OK && hl == sizeof(got.root_hash);
         nvs_close(h);
         if (all)
         {
@@ -119,9 +122,25 @@ esp_err_t settings_save(const struct hop_settings *s)
     if (err == ESP_OK) err = nvs_set_str(h, "mesh_pw", s->mesh_password);
     if (err == ESP_OK) err = nvs_set_str(h, "ap_ssid", s->ap_ssid);
     if (err == ESP_OK) err = nvs_set_str(h, "ap_pw", s->ap_password);
+    if (err == ESP_OK) err = nvs_set_blob(h, "root_pw", s->root_hash, sizeof(s->root_hash));
     if (err == ESP_OK) err = nvs_commit(h);
     nvs_close(h);
     ESP_LOGI(TAG, "Settings saved (mesh \"%s\", hotspot \"%s\")", s->mesh_id, s->ap_ssid);
+    return err;
+}
+
+esp_err_t settings_save_root_hash(const uint8_t hash[SETTINGS_ROOT_HASH_LEN])
+{
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
+    if (err != ESP_OK)
+    {
+        return err;
+    }
+    err = nvs_set_blob(h, "root_pw", hash, SETTINGS_ROOT_HASH_LEN);
+    if (err == ESP_OK) err = nvs_commit(h);
+    nvs_close(h);
+    ESP_LOGI(TAG, "Root password changed");
     return err;
 }
 
