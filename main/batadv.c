@@ -6,6 +6,7 @@
  */
 
 #include "batadv.h"
+#include "gateway_protocol.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,6 +60,7 @@ static const char *TAG = "batadv";
 #define EXPECTED_SEQNO_RANGE 65536
 #define RESET_PROTECTION_US (30 * 1000000LL)
 #define PURGE_TIMEOUT_US (200 * 1000000LL)
+#define GATEWAY_TIMEOUT_US (30 * 1000000LL)
 #define TT_REQUEST_TIMEOUT_US (3 * 1000000LL)
 #define FRAG_MAX_FRAGMENTS 16
 #define FRAG_MAX_FRAG_SIZE 1280
@@ -192,6 +194,8 @@ struct orig
     uint32_t last_bcast_seqno;
     uint64_t bcast_bits;
     int64_t bcast_reset_us;
+    uint32_t gateway_down, gateway_up;
+    int64_t gateway_seen_us;
 };
 
 struct tt_local
@@ -869,6 +873,15 @@ static uint32_t forward_penalty(uint32_t tp)
 
 static void process_tvlvs_ogm(int oi, const uint8_t *tvlv, size_t len)
 {
+    uint32_t down, up;
+    if (!gateway_parse_tvlvs(tvlv, len, &down, &up))
+    {
+        ESP_LOGD(TAG, "Ignoring malformed OGM TVLVs");
+        return;
+    }
+    s_orig[oi].gateway_down = down;
+    s_orig[oi].gateway_up = up;
+    s_orig[oi].gateway_seen_us = now_us();
     while (len >= sizeof(struct tvlv_hdr))
     {
         const struct tvlv_hdr *h = (const struct tvlv_hdr *)tvlv;
@@ -1705,6 +1718,39 @@ int batadv_get_originators(struct batadv_originator *out, int max)
     }
     UNLOCK();
     return n;
+}
+
+bool batadv_get_best_gateway(const uint8_t preferred[6], struct batadv_gateway *out)
+{
+    bool found = false;
+    uint32_t best = 0;
+    int64_t now = now_us();
+    LOCK();
+    for (int i = 0; i < BATADV_MAX_ORIGINATORS; i++)
+    {
+        const struct orig *o = &s_orig[i];
+        int r = router_for(i);
+        if (!o->used || r < 0 || !o->via[r].valid || o->gateway_down == 0 || o->gateway_up == 0 ||
+            now - o->gateway_seen_us > GATEWAY_TIMEOUT_US ||
+            now - s_neigh[r].last_seen > GATEWAY_TIMEOUT_US)
+        {
+            continue;
+        }
+        uint32_t path = o->via[r].throughput;
+        uint32_t metric = path < o->gateway_down ? path : o->gateway_down;
+        if (metric == 0 || (found && (metric < best || (metric == best && !mac_eq(o->addr, preferred)))))
+        {
+            continue;
+        }
+        found = true;
+        best = metric;
+        memcpy(out->addr, o->addr, 6);
+        out->bandwidth_down = o->gateway_down;
+        out->bandwidth_up = o->gateway_up;
+        out->throughput = path;
+    }
+    UNLOCK();
+    return found;
 }
 
 int batadv_get_tt_global(struct batadv_tt_entry *out, int max)

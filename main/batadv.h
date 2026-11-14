@@ -64,6 +64,13 @@ struct batadv_tt_entry
     uint16_t flags;
 };
 
+struct batadv_gateway
+{
+    uint8_t addr[6];
+    uint32_t bandwidth_down, bandwidth_up;
+    uint32_t throughput;
+};
+
 struct batadv_stats
 {
     uint32_t elp_tx, elp_rx, ogm_tx, ogm_rx, ogm_fwd, ogm_dropped;
@@ -90,3 +97,7 @@ int batadv_get_tt_local(struct batadv_tt_entry *out, int max);
 void batadv_get_stats(struct batadv_stats *out);
 uint8_t batadv_ttvn(void);
 uint32_t batadv_local_crc(void);
+
+/* BATMAN_V metric: min(path throughput, advertised download bandwidth).
+ * Keep preferred on equal metrics; ignore withdrawn/stale/unreachable gateways. */
+bool batadv_get_best_gateway(const uint8_t preferred[6], struct batadv_gateway *out);
