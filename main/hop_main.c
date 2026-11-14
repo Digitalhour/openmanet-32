@@ -37,6 +37,7 @@
 
 #include "batadv.h"
 #include "hotspot.h"
+#include "gateway.h"
 #include "mesh.h"
 #include "radio.h"
 #include "settings.h"
@@ -125,6 +126,7 @@ static esp_err_t mesh_link_send(const uint8_t *frame, size_t len)
 
 /* ---------- Pinging the neighbours over bat0 ---------- */
 
+#if CONFIG_HOP_PING_PEERS
 static void on_ping_end(esp_ping_handle_t hdl, void *args)
 {
     (void)args;
@@ -170,6 +172,7 @@ static void ping_task(void *arg)
         }
     }
 }
+#endif
 
 /* ---------- Status ---------- */
 
@@ -343,24 +346,27 @@ static void bringup_task(void *arg)
     base.if_key = "BAT0";
     base.if_desc = "bat0";
     base.route_prio = 40;
-    base.flags = (esp_netif_flags_t)(ESP_NETIF_FLAG_GARP | ESP_NETIF_FLAG_EVENT_IP_MODIFIED);
+    base.flags = (esp_netif_flags_t)(ESP_NETIF_FLAG_GARP | ESP_NETIF_FLAG_EVENT_IP_MODIFIED |
+                                    ESP_NETIF_DEFAULT_MLDV6_REPORT_FLAGS);
     esp_netif_config_t ncfg = { .base = &base, .driver = NULL, .stack = ESP_NETIF_NETSTACK_DEFAULT_WIFI_STA };
     s_bat_netif = esp_netif_new(&ncfg);
     assert(s_bat_netif);
     static esp_netif_driver_base_t driver = { .post_attach = bat_post_attach };
     ESP_ERROR_CHECK(esp_netif_attach(s_bat_netif, &driver));
-    esp_netif_set_mac(s_bat_netif, s_bat_mac);
+    ESP_ERROR_CHECK(esp_netif_set_mac(s_bat_netif, s_bat_mac));
     esp_netif_action_start(s_bat_netif, NULL, 0, NULL);
     esp_netif_ip_info_t info = { 0 };
     info.ip.addr = bat_ip_for(s_bat_mac);
     info.netmask.addr = esp_ip4addr_aton(CONFIG_HOP_BAT_MASK);
-    esp_netif_dhcpc_stop(s_bat_netif);
+    ESP_ERROR_CHECK(esp_netif_dhcpc_stop(s_bat_netif));
     ESP_ERROR_CHECK(esp_netif_set_ip_info(s_bat_netif, &info));
-    esp_netif_action_connected(s_bat_netif, NULL, 0, NULL);
-
-    ESP_ERROR_CHECK(batadv_start(&bc));
     ESP_LOGI(TAG, "hop node up: bat0 " IPSTR, IP2STR(&info.ip));
+    ESP_ERROR_CHECK(batadv_start(&bc));
+    esp_netif_action_connected(s_bat_netif, NULL, 0, NULL);
     hotspot_start(s_bat_netif);
+#if CONFIG_HOP_AUTO_GATEWAY
+    gateway_start(s_bat_netif);
+#endif
     xTaskCreate(status_task, "status", 6144, NULL, 3, NULL);
 #if CONFIG_HOP_PING_PEERS
     xTaskCreate(ping_task, "pinger", 4096, NULL, 3, NULL);

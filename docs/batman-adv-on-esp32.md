@@ -198,15 +198,17 @@ fragment on the way out; incoming fragments still need reassembly.
 
 ### 7. Getting an address
 
-bat0 is one Ethernet domain, so once the tables are in place we run a normal DHCP client on
-it: the DHCP broadcast floods the mesh, the nearest mesh point's DHCP scope answers, and we
-get a `10.41.x.x` address with the mesh gate as gateway. No manual addressing. ARP works
-the same way (flooded); DAT is an optimisation we can live without.
+The original design proposed a DHCP client on bat0. The implementation instead retains a
+static MAC-derived IPv4 address. Native gateway discovery now reads gateway TVLVs in OGMs,
+selects using the BATMAN_V effective-throughput metric, and requests OpenMANET Gateway
+protobuf records from ALFRED primaries (data type 100, version 1). The matching record
+supplies the gateway's IPv4 address for both the default route and DNS, as in `openmanetd`.
+IPv6 link-local is used for ALFRED; mesh IPv4 addressing stays static. See the HOWTO for
+requirements and expiry behavior. ARP remains flooded; DAT is optional.
 
 ### 8. Things we skip
 
-DAT (distributed ARP), BLA (bridge loop avoidance), network coding, the GW TVLV (gateway
-announcements; the mesh gate's DHCP handles our default route), the MCAST TVLV, ICMP, ELP
+DAT (distributed ARP), BLA (bridge loop avoidance), network coding, the MCAST TVLV, ICMP, ELP
 probes, OGM aggregation, ttvn-based re-routing, roaming advertisements. None of them is
 required for the other nodes to accept us.
 

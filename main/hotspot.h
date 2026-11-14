@@ -18,3 +18,7 @@ void hotspot_prepare(const struct hop_settings *running);
 /* Once bat0 is up: turns the hotspot on, routes its clients into the mesh through NAT, and
  * starts the page. */
 void hotspot_start(esp_netif_t *mesh_netif);
+
+/* Advertise a nonzero discovered resolver without discarding existing DHCP leases.
+ * Called by gateway discovery after hotspot_start(). Address is in network byte order. */
+void hotspot_set_upstream_dns(uint32_t resolver);

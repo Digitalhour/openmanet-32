@@ -14,6 +14,7 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
+#include "dhcpserver/dhcpserver.h"
 #include "lwip/inet.h"
 #include "lwip/sockets.h"
 #include "sdkconfig.h"
@@ -53,7 +54,7 @@ static const char s_portal_uri[] = "http://" CONFIG_HOP_AP_IP "/";
 /* Clients reach the mesh through NAT. Per ESP-IDF's softap_sta example and the
  * openmanet-gateway notes: NAPT goes on the access point's netif (esp_netif sets it on exactly
  * the netif handed over and clears every other), and the uplink must be the default netif so
- * translated packets leave on bat0. No DNS is offered: the mesh has no resolver to point at.
+ * translated packets leave on bat0. The discovered gateway is advertised as DNS via DHCP.
  * NAPT can only be switched on while the AP netif is up (esp_netif_lwip.c,
  * esp_netif_napt_control_api, v5.4.4 line 2599), which happens on WIFI_EVENT_AP_START after
  * esp_wifi_start() has returned, so this runs from that event. */
@@ -105,6 +106,17 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     }
 }
 
+void hotspot_set_upstream_dns(uint32_t resolver)
+{
+    /* DNS can change while DHCP runs. Restarting DHCP would discard active leases. */
+    esp_netif_dns_info_t dns = { 0 };
+    dns.ip.type = ESP_IPADDR_TYPE_V4;
+    dns.ip.u_addr.ip4.addr = resolver;
+    ESP_ERROR_CHECK(esp_netif_set_dns_info(s_ap_netif, ESP_NETIF_DNS_MAIN, &dns));
+    esp_ip4_addr_t ip = { .addr = resolver };
+    ESP_LOGI(TAG, "Hotspot DHCP DNS: " IPSTR " (clients receive changes on lease renewal)", IP2STR(&ip));
+}
+
 void hotspot_prepare(const struct hop_settings *running)
 {
     s_running = *running;
@@ -128,6 +140,20 @@ void hotspot_prepare(const struct hop_settings *running)
     ip.netmask.addr = esp_ip4addr_aton("255.255.255.0");
     esp_netif_dhcps_stop(s_ap_netif);
     ESP_ERROR_CHECK(esp_netif_set_ip_info(s_ap_netif, &ip));
+    if (!s_setup)
+    {
+        uint8_t offer_dns = OFFER_DNS;
+        ESP_ERROR_CHECK(esp_netif_dhcps_option(s_ap_netif, ESP_NETIF_OP_SET,
+                                             ESP_NETIF_DOMAIN_NAME_SERVER, &offer_dns, sizeof(offer_dns)));
+        esp_netif_dns_info_t dns = { 0 };
+        dns.ip.type = ESP_IPADDR_TYPE_V4;
+        dns.ip.u_addr.ip4 = ip.ip;
+        ESP_ERROR_CHECK(esp_netif_set_dns_info(s_ap_netif, ESP_NETIF_DNS_MAIN, &dns));
+        uint32_t lease_minutes = 2;
+        ESP_ERROR_CHECK(esp_netif_dhcps_option(s_ap_netif, ESP_NETIF_OP_SET,
+                                             ESP_NETIF_IP_ADDRESS_LEASE_TIME, &lease_minutes, sizeof(lease_minutes)));
+        ESP_LOGI(TAG, "Hotspot internet DNS unavailable until an OpenMANET gateway is discovered");
+    }
     if (s_setup)
     {
         esp_netif_dhcps_option(s_ap_netif, ESP_NETIF_OP_SET, ESP_NETIF_CAPTIVEPORTAL_URI, (void *)s_portal_uri,

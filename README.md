@@ -107,8 +107,20 @@ board's own hotspot. Over the mesh, root can sign in and look but not change any
 another node's web page for a few seconds and times it. Nothing needs installing on the node.
 It also times downloads and uploads between your phone or laptop and the meshpoint.
 
-Hotspot clients reach the mesh through NAT. The board offers no DNS, since an OpenMANET mesh
-has none of its own, so use addresses.
+Hotspot clients reach the mesh through NAT. The node keeps its static mesh IPv4 address
+(`HOP_BAT_SUBNET` / `HOP_BAT_MASK`), but discovers internet gateways automatically:
+BATMAN_V gateway advertisements select the best route, and OpenMANET ALFRED gateway
+records supply the matching IPv4 address. As on native `openmanetd`, that address becomes
+both the default gateway and DNS server. No upstream IP addresses are built into the firmware.
+The mesh needs an OpenMANET internet gateway and an ALFRED primary; upstream forwarding/NAT
+must work. IPv6 link-local is used only for ALFRED discovery, not as the internet uplink.
+
+Gateway changes update the route and hotspot DHCP DNS automatically. Hotspot leases last
+two minutes; reconnect clients after flashing or to receive DNS changes sooner. Withdrawal
+or expiry of advertisements removes the internet route while static mesh access and the
+hotspot dashboard remain available. A different mesh IPv4 subnet still requires updating the
+static address configuration. Setup mode retains its local captive DNS server.
+Disable `HOP_AUTO_GATEWAY` in `idf.py menuconfig` for mesh-only operation.
 
 **Locked out or forgot a password?** Hold the BOOT button for 5 seconds while the board runs
 (the LED blinks fast). That erases every setting, the root password included, and the board

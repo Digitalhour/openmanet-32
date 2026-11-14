@@ -149,6 +149,37 @@ You can also change all of these interactively with `idf.py menuconfig`, under
 
 ## 7. Build and flash
 
+Native gateway discovery (`HOP_AUTO_GATEWAY`) is enabled by default when IPv6 is enabled.
+The node retains its static `HOP_BAT_SUBNET` / `HOP_BAT_MASK` address; it does not request
+a DHCP address. It reads BATMAN gateway TVLVs, ranks gateways using the BATMAN_V metric
+`min(path throughput, advertised download bandwidth)`, and keeps its current choice on ties.
+It then requests OpenMANET gateway records (ALFRED data type 100, version 1) from discovered
+ALFRED primaries over IPv6 link-local UDP port 16962. A matching gateway MAC supplies the
+IPv4 default route and DNS server, following native `openmanetd` behavior.
+
+No upstream IPv4 addresses are compiled in. An OpenMANET gateway must advertise itself,
+run working internet forwarding/NAT and DNS, and publish its gateway record through ALFRED.
+At least one reachable ALFRED primary is required. Allow its IPv6 link-local announcements
+and replies on the mesh. The advertised gateway must be another host in the node's static
+IPv4 subnet. Changing the mesh subnet still requires changing the static address settings.
+
+Serial logs distinguish no BATMAN gateway, waiting for the matching ALFRED record, and
+an installed gateway/DNS. Gateway withdrawal clears the route; advertisements become stale
+after 30 seconds, ALFRED primaries after 60 seconds, and unrefreshed address records after
+180 seconds. Requests repeat every 10 seconds. Mesh-only access and the hotspot dashboard
+continue without an internet gateway. Disable `HOP_AUTO_GATEWAY` for mesh-only builds.
+
+Hotspot DNS is updated when the discovered gateway changes. Clients use two-minute DHCP
+leases; reconnect after flashing to replace old leases immediately. Internet connections
+in progress may need to be retried after a gateway switch. DNS updates do not restart the
+DHCP server or discard client leases. Before the first discovery DNS is unavailable;
+after a withdrawal clients retain the last DNS address until another gateway is discovered.
+
+The standalone host test in `tests/gateway_protocol_test.c` exercises the BATMAN gateway
+TVLV and ALFRED/protobuf decoders, including 50,000 deterministic mutated packets.
+Compile it together with `main/gateway_protocol.c`, adding `main` to the include path,
+using a host C11 compiler (for example `cc` or `zig cc`), then run the resulting executable.
+
 ```sh
 idf.py set-target esp32s3
 idf.py build

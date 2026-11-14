@@ -44,6 +44,16 @@ menu "openmanet-32"
         range 0 30
         default 8
 
+    config HOP_AUTO_GATEWAY
+        bool "Discover OpenMANET internet gateways automatically"
+        depends on LWIP_IPV6
+        default y
+        help
+            Keep the node's static mesh address. Select a BATMAN_V gateway and learn
+            its IPv4 address from OpenMANET ALFRED announcements over IPv6 link-local.
+            Use that gateway for the default route and DNS, as openmanetd does.
+            Without advertisements the node continues to provide mesh-only access.
+
     config HOP_BAT_SUBNET
         string "bat0 subnet (the node takes .<last byte of its bat address>)"
         default "10.41.250.0"
