@@ -306,6 +306,11 @@ tell a radio problem from a password problem, `docs/openmanet-test-mesh.sh` move
 to an open test mesh: set the meshpoint up with that mesh name and "no password", then put
 the node back with `docs/openmanet-test-mesh-undo.sh`.
 
+**The hotspot disappears after selecting a channel with a 1 MHz primary.**
+Older firmware filtered 1 MHz subchannels out of the driver's channel list. This prevents
+HaLow startup and causes a reboot loop before the hotspot starts. Update to firmware that
+retains those subchannels; flashing preserves the saved mesh and hotspot settings.
+
 **The log repeats `SAE with ... failed: no answer` right after a quick restart.**
 If the board restarted within a minute of linking, the nodes can ignore its handshake for
 several minutes. Wait, or restart the board once more (unplug and plug it back in).

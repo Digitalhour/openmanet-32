@@ -301,9 +301,10 @@ void __wrap_mmhal_wlan_hard_reset(void)
     vTaskDelay(pdMS_TO_TICKS(s_cfg.reset_settle_ms ? s_cfg.reset_settle_ms : 250));
 }
 
-/* The whole mesh lives on one channel; give morselib only the channels inside it (2 MHz and
- * up). Nothing scans in this firmware, but the window keeps any probe short, which weak USB
- * ports need, and it records the channel for the status page. */
+/* The whole mesh lives on one channel; give morselib only the channels inside it, including
+ * the 1 MHz entries needed to resolve a 1 MHz primary. Nothing scans in this firmware, but
+ * the window keeps any probe short, which weak USB ports need, and it records the channel
+ * for the status page. */
 static struct mmwlan_s1g_channel s_chan_set[16];
 static struct mmwlan_s1g_channel_list s_chan_list;
 
@@ -341,7 +342,7 @@ enum mmwlan_status __wrap_mmwlan_set_channel_list(const struct mmwlan_s1g_channe
         const struct mmwlan_s1g_channel *ch = &list->channels[i];
         uint32_t ch_low = ch->centre_freq_hz - ch->bw_mhz * 500000U;
         uint32_t ch_high = ch->centre_freq_hz + ch->bw_mhz * 500000U;
-        if (ch_low >= low && ch_high <= high && ch->bw_mhz >= 2)
+        if (ch_low >= low && ch_high <= high)
         {
             s_chan_set[n++] = *ch;
         }
